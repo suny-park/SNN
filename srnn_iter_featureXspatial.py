@@ -1,5 +1,4 @@
-# SP 0623 Spiking network model to simulate top-down feature-based attention 
-# with modulations on randomness of between-layer connections
+# js 02022022, based in part on BB2019 Neuron model
 
 from brian2 import *
 import numpy as np
@@ -11,6 +10,8 @@ from scipy.special import i0, i1
 import time
 
 from random import choices # needed for sampling from pdf
+
+from scipy.io import savemat
 
 # use genn
 # import brian2genn
@@ -105,22 +106,23 @@ class rand_attn_inh:
         #------------------------------------------------ 
         self.StimExposeTime = params.get('StimExposeTime', .5 * second)
         self.BaselineScale = params.get('BaselineScale', 0)
-        self.StimStrength = params.get('StimStrength', 10)
+        # self.StimStrength = params.get('StimStrength', 10)
+        self.s_stim_amps = params.get('s_stim_amps',[9])
         self.kappa = params.get('kappa', 14)
         self.StimToZero = params.get('StimToZero', 3)
         self.SetSize = params.get('SetSize', 4)                                 # WM set size 
         self.StimRandOrFixed = params.get('StimRandOrFixed', 0)                 # if StimRandOrFixed == 1, then pick from from a discrete set of stim values, otherwise random picks
-        self.S_N_stimvals = params.get('S_N_stimvals', 4)               # if StimRandOrFixed == 1, then pick from this many possible stim values
-        self.S_stim_pools = params.get('S_stim_pools', [3])  # what pools to present stims to
+        # self.S_N_stimvals = params.get('S_N_stimvals', 4)               # if StimRandOrFixed == 1, then pick from this many possible stim values
+        # self.S_stim_pools = params.get('S_stim_pools', [3])  # what pools to present stims to
         
         #------------------------------------------------ 
         # stim level for random layer
         #------------------------------------------------         
         # self.R_stim = params.get('R_stim', 0)                                   # amplitude of stim to random layer
-        self.rand_top_down =  params.get('rand_top_down', 0)
+        # self.rand_top_down =  params.get('rand_top_down', 0)
         # self.R_StimProportion = params.get('R_StimProportion', 0)               # proportion of cells in random layer to stimulate (based on their activity level)
         # self.R_NumNeuronsToStim = int(np.floor(self.R_StimProportion * self.R_N_neuron))
-        self.SF_exp = params.get('SF_exp', 6)                               # spatial selectivity of top down feedback to rand layer.         
+        # self.SF_exp = params.get('SF_exp', 6)                               # spatial selectivity of top down feedback to rand layer.         
         
         #------------------------------------------------ 
         # recurrent synaptic weight stuff for sensory pools
@@ -154,20 +156,23 @@ class rand_attn_inh:
         #------------------------------------------------ 
         # synaptic params for sensory-to-random layer connections
         #------------------------------------------------ 
-        self.S_to_R_target_w = params.get('S_to_R_target_w', 2.1)       # feedforward weight before balancing
+        self.S_to_R_target_w = params.get('S_to_R_target_w', 2.1)       # feedforward weight before balancing (alpha from BB2019)
         self.S_to_R_ei_balance = params.get('S_to_R_ei_balance', -1)    # -1 is perfectly balanced feedforward
         self.S_to_R_baseline = params.get('S_to_R_baseline', 0)
         
-        self.R_to_S_target_w = params.get('R_to_S_target_w', 0.2)     # feedback weight before balancing
+        self.R_to_S_target_w = params.get('R_to_S_target_w', 0.2)     # feedback weight before balancing (beta from BB2019)
         self.R_to_S_ei_balance = params.get('R_to_S_ei_balance', -1)    # -1 is perfectly balanced feedback
         self.R_to_S_baseline = params.get('R_to_S_baseline', 0)
-        self.exc_con_prob = params.get('exc_con_prob', 0.35)            # probability of forming each excitatory connection -- will be later used to mask connection weights
+        self.exc_con_prob = params.get('exc_con_prob', 0.35)            # this is gamma from BB2019
         self.weight_factor = float(params.get('weight_factor', 1000.0)) # factor for computing weights - make float (have extra typecasting in there just in case)
 
         #------------------------------------------------ 
         # number of trials
         #------------------------------------------------ 
-        self.N_trials = params.get('N_trials', 1)
+        # self.N_trials = params.get('N_trials', 1)
+        self.N_trials_sensory = params.get('N_trials_sensory', 1)
+        self.N_trials_attention = params.get('N_trials_attention', 1)
+        
         
         #------------------------------------------------ 
         # random seed - this is important! will determine
@@ -182,12 +187,14 @@ class rand_attn_inh:
         self.doPlot = params.get('doPlot',0)
         self.N_stim_loc = params.get('N_stim_loc',16)
         self.N_stim_main = params.get('N_stim_main',2)
-        self.r_stim_amps = params.get('r_stim_amps',[5])
+        # self.r_stim_amps = params.get('r_stim_amps',[5])
+        self.r_stim_amps_F = params.get('r_stim_amps_F',[5])
+        self.r_stim_amps_S = params.get('r_stim_amps_S',[5])
         self.r_stim_ratios = params.get('r_stim_ratios',[0.2])
         # self.rep = params.get('rep', 0)
         self.shiftStep = params.get('shiftStep', 32)
-        self.attStimShift= params.get('attStimShift', 9)
-        self.rand_kappa = params.get('rand_kappa',1)
+        self.shiftReps= params.get('shiftReps', 16)
+        self.rand_kappa = params.get('rand_kappa',0)
          
     #------------------------------------------------        
     #------------------------------------------------
@@ -339,7 +346,7 @@ class rand_attn_inh:
         #------------------------------------------------                 
         return stims.flatten()
     
-    def roll_stims_main(self,shiftStep,plotStim):
+    def roll_stims_main(self,shiftStep,plotStim,attStimShift):
         """
         use define_stims to design the stim shape (and truncate)
         then use this to roll that stim to the desired position 
@@ -360,7 +367,7 @@ class rand_attn_inh:
         for ps in range(self.N_stim_main):
             # stims[0,:] = stims[0,:]+np.roll(self.stim_drive, int(self.S_N_neuron/2*ps+self.S_N_neuron/8*2 - self.S_N_neuron/2))
             # change how much to shift based on the rep value
-            stims[0,:] = stims[0,:]+np.roll(self.stim_drive, int(self.S_N_neuron/2*ps+self.S_N_neuron/shiftStep*self.attStimShift) - int(self.S_N_neuron/2))
+            stims[0,:] = stims[0,:]+np.roll(self.stim_drive, int(self.S_N_neuron/2*ps+self.S_N_neuron/shiftStep*attStimShift) - int(self.S_N_neuron/2))
         if plotStim==1:
             plt.plot(stims[0,:])
             plt.show()
@@ -779,7 +786,7 @@ class rand_attn_inh:
         #------------------------------------------------ 
         # flatten per brian2 convention and return
         #------------------------------------------------ 
-        return S_to_R_con_mat.flatten(), R_to_S_con_mat.flatten()
+        return S_to_R_con_mat.flatten(), R_to_S_con_mat.flatten(), S_to_R_con_mat, R_to_S_con_mat
     
     #------------------------------------------------    
     #------------------------------------------------
@@ -1045,7 +1052,7 @@ class rand_attn_inh:
         ax.set_ylim([0, y_lim])
         ax.set_ylabel(y_label + ' Neurons')
         ax.set_xlabel('Time (ms)')
-        ax.set_title('Att:'+str(attStim)+' R_stim:'+str(self.R_stim)+' R_Prop:'+str(self.R_StimProportion)+' StimStr:'+str(self.StimStrength))
+        ax.set_title('Att:'+str(attStim)+' R_stim_S:'+str(self.R_stim_S)+' R_stim_F:'+str(self.R_stim_F)+' StimStr:'+str(self.StimStrength))
         
         #------------------------------------------------        
         # plot some horizontal lines marking edges of each pool, only if plotting
@@ -1170,7 +1177,7 @@ class rand_attn_inh:
         # feedback (random to sensory) weights
         # and assign to synapses.
         #------------------------------------------------            
-        S_to_R_con.w, R_to_S_con.w = self.get_between_layer_weights()
+        S_to_R_con.w, R_to_S_con.w, S_to_R_con_mat, R_to_S_con_mat = self.get_between_layer_weights()
         
         #------------------------------------------------
         # set up a state monitor for random pool
@@ -1226,15 +1233,16 @@ class rand_attn_inh:
         #------------------------------------------------
         base_in = self.baseline_input()
         
-        #%%
+        #%% 
         
         print('Phase 1: Stimulating Sensory Pools')
         
         N_stim_loc = self.N_stim_loc # number of stimuli in the localizer task
-        S_fr_avg_loc = np.full((self.N_trials*N_stim_loc*self.S_N_pools, self.S_N_pools * self.S_N_neuron), np.nan)
-        label_stim_loc = np.full((self.N_trials*N_stim_loc*self.S_N_pools), np.nan)
-        label_pool_loc = np.full((self.N_trials*N_stim_loc*self.S_N_pools), np.nan)
-        label_trial_loc = np.full((self.N_trials*N_stim_loc*self.S_N_pools), np.nan)
+        nTotalTrials = self.N_trials_sensory*N_stim_loc*self.S_N_pools
+        S_fr_avg_loc = np.full((nTotalTrials, self.S_N_pools * self.S_N_neuron), np.nan)
+        label_stim_loc = np.full((nTotalTrials), np.nan)
+        label_pool_loc = np.full((nTotalTrials), np.nan)
+        label_trial_loc = np.full((nTotalTrials), np.nan)
         
         
         tc = 0 # global trial counter for localizer task
@@ -1257,7 +1265,7 @@ class rand_attn_inh:
                 stims = self.roll_stims(stim_vals) # S_N_pools x S_N_neuron matrix of stims
                 
                 # run N trials for the given stimulus
-                for t in np.arange(self.N_trials):
+                for t in np.arange(self.N_trials_sensory):
                     
                     #------------------------------------------------
                     # restore the snapshot of the network on each trial
@@ -1295,107 +1303,184 @@ class rand_attn_inh:
         # record response from the last time windows 
         # output: trial label of attended stimulus, response (trial X neuron)
         # Step 1: Define random neurons that maximally respond to to-be-attended stimulus
-        # Step 2: Present two stimuli and apply gain to one of them, record activity 
+        # Step 2: Apply gain to one sub-network (spatial attention)
+        # Step 3: Present two stimuli
+        # Step 4: Apply gain to one of the two stimuli (feature-based attention)
         print('')
         print('Phase 2: Applying Gain to Random Layer')
         # loop over two stimuli that will be attended
         N_stim_main = self.N_stim_main # number of stimuli in the main task
         shiftStep = self.shiftStep # 32
-        S_fr_avg_main = np.full((self.N_trials*N_stim_main, self.S_N_pools * self.S_N_neuron,len(self.r_stim_amps),len(self.r_stim_ratios)), np.nan)
+        spatialAttPools=1
+        nTotalTrial = self.N_trials_attention*N_stim_main*self.shiftReps*len(self.s_stim_amps)*spatialAttPools # the last 2 is for spatial attention pool
         
-        fr_angle = np.full((self.N_trials*N_stim_main, self.S_N_pools, nTimeSteps,len(self.r_stim_amps),len(self.r_stim_ratios)), np.nan)
-        fr_abs = np.full((self.N_trials*N_stim_main, self.S_N_pools, nTimeSteps,len(self.r_stim_amps),len(self.r_stim_ratios)), np.nan)
-        fr_att_abs = np.full((self.N_trials*N_stim_main, self.S_N_pools, nTimeSteps,len(self.r_stim_amps),len(self.r_stim_ratios)), np.nan)
+        # setting R proportion to 0.2 for now
+        self.R_StimProportion = self.r_stim_ratios[0]
         
-        for r_cnt, R_stim in enumerate(self.r_stim_amps):
-            self.R_stim = R_stim
-            #print('R_stim '+str(R_stim))
-            for r_prop, R_StimProportion in enumerate(self.r_stim_ratios):
-                self.R_StimProportion = R_StimProportion
-                #print('R_StimProportion '+str(R_StimProportion))
-                if R_stim == 0:
-                    R_StimProportion = 0
+        S_fr_avg_main = np.full((nTotalTrial, self.S_N_pools * self.S_N_neuron,len(self.r_stim_amps_F),len(self.r_stim_amps_S)), np.nan)
+        
+        fr_angle = np.full((nTotalTrial, self.S_N_pools, nTimeSteps,len(self.r_stim_amps_F),len(self.r_stim_amps_S)), np.nan)
+        fr_abs = np.full((nTotalTrial, self.S_N_pools, nTimeSteps,len(self.r_stim_amps_F),len(self.r_stim_amps_S)), np.nan)
+        fr_att_abs = np.full((nTotalTrial, self.S_N_pools, nTimeSteps,len(self.r_stim_amps_F),len(self.r_stim_amps_S)), np.nan)
+        
+        # define an empty numpy object to draw raster plots later
+        S_AttentionTask = np.empty((len(self.r_stim_amps_F),len(self.r_stim_amps_S), len(self.s_stim_amps), N_stim_main), dtype=object)
+        R_AttentionTask = np.empty((len(self.r_stim_amps_F),len(self.r_stim_amps_S), len(self.s_stim_amps), N_stim_main), dtype=object)
+        
+        for r_cnt_F, R_stim_F in enumerate(self.r_stim_amps_F):
+            self.R_stim_F = R_stim_F # feature based attention gain
+            for r_cnt_S, R_stim_S in enumerate(self.r_stim_amps_S):
+                self.R_stim_S = R_stim_S # spatial attention gain
                     
                 # OG loop
                 tc = 0 # global trial counter for main task
-                label_stim_main = np.full((self.N_trials*N_stim_main), np.nan) #these should be the same across iterations
-                label_trial_main = np.full((self.N_trials*N_stim_main), np.nan) #these should be the same across iterations
-                for attStim in range(N_stim_main):
-                    #print('Attend Stim '+str(attStim))
+                label_stim_main = np.full((nTotalTrial), np.nan) #these should be the same across iterations
+                label_trial_main = np.full((nTotalTrial), np.nan) #these should be the same across iterations
+                label_attPool_main = np.full((nTotalTrial), np.nan) # which pool was attended on each trial
+                label_stim_strength_main = np.full((nTotalTrial), np.nan) # stimulus strength
+                
+                for ss_cnt, self.StimStrength in enumerate(self.s_stim_amps):
+                
+                    # another loop here for shifting stimulus pairs
+                    # for attStimShift in np.arange(self.shiftReps):
+                    for attStimShift in [8]:
                     
-                    # loop over trials of [defining R neurons + applying gain]
-                    for t in np.arange(self.N_trials):
-                        
-                        
-                        stim_vals = np.full((self.S_N_pools), np.nan)
-                        
-                        # present to-be-attended stimulus in Pool 0
-                        # shift a little so that we can see it better on the raster plot
-                        # attStimVal = int(self.S_N_neuron/N_stim_main*attStim+self.S_N_neuron/8*2) 
-                        # change how much to shift based on the rep value
-                        attStimVal = int(self.S_N_neuron/N_stim_main*attStim)+int(self.S_N_neuron/shiftStep*self.attStimShift) 
-                        stim_vals[0] = attStimVal
-                        # if t==0 and r_prop==0 and r_cnt==0:
-                        #     print('To-be-attended: '+str(attStimVal))
-                        # int(self.S_N_neuron/2*ps+self.S_N_neuron/8*2 - self.S_N_neuron/2)
-                        
-                        # compute generic stimulus shape
-                        self.stim_drive = self.define_stims(10) # stim_strength manually set to 10
-                        
-                        # roll to the right place
-                        stims = self.roll_stims(stim_vals) # S_N_pools x S_N_neuron matrix of stims
-                        
-                        ## Present 1 Stim and 
-                        # reset network
-                        restore('initialized')
-                        
-                        base_in = self.baseline_input()
-                        
-                        # present stimulus
-                        S_pools.Stim = stims + base_in
-                        run(self.StimExposeTime)
-                        # sort random neurons by their firing rate
-                        sort_ind = np.argsort(R_state.R_rate[:,-1], axis=0) # current state of firing
-                        stim_ind = np.zeros(self.R_N_neuron)
-                        R_NumNeuronsToStim = int(np.floor(R_StimProportion * self.R_N_neuron))
-                        stim_ind[sort_ind[self.R_N_neuron - R_NumNeuronsToStim : -1]] = R_stim
-                        
-                        # reset network
-                        # S_pools.Stim = base_in
-                        # run(self.StimExposeTime)
-                        restore('initialized')
-                        
-                        self.stim_drive = self.define_stims(self.StimStrength) # define again with actual stimulus strength
-                        # present two stimuli at the same time
-                        plotStim  = 0
-                        # if attStim==0 and t==0 and r_prop==0 and r_cnt==0:
-                        #     plotStim = 1
-                        stims = self.roll_stims_main(shiftStep,plotStim)
-                        
-                        # apply stimulus & top-down gain
-                        S_pools.Stim = stims + base_in
-                        R_pool.Stim = stim_ind
-                        run(self.AttnTime)
-                        
-                        # record FR
-                        S_fr_avg_main[tc,:,r_cnt,r_prop] = np.mean(S_state.S_rate[:,-5:],axis=1) # average FR for the last 5 timesteps (trial,neurons)
-                        label_stim_main[tc] = attStimVal # attended stimulus label
-                        label_trial_main[tc] = t
-                        
-                        if self.doPlot:
-                            if t == 0:
-                                self.plt_raster_att(S_spike, 'Sensory',attStim)
-                                
-                        #------------------------------------------------
-                        # get predicted ang,abs of vector over each time window (tw) in the trial for each pool...
-                        # use the firing rates computed and stored in the StateMonitor(S_state)
-                        #------------------------------------------------
-                        stim_vals_decode = np.tile(stim_vals[0],self.S_N_pools) # pretend we are decoding presented stimulus from all pools
-                        for tw in np.arange(nTimeSteps):
-                            fr_angle[tc,:,tw,r_cnt,r_prop], fr_abs[tc,:,tw,r_cnt,r_prop], fr_att_abs[tc,:,tw,r_cnt,r_prop] = self.get_fr_vector(S_state.S_rate[:,tw], stim_vals_decode)
-                        
-                        
-                        tc+=1 # increase global trial counter
+                        for attStim in range(N_stim_main):
+                            #print('Attend Stim '+str(attStim))
+                            
+                            for attPool in range(spatialAttPools): # either attend to the stimulated or unstimulated pool
+                                # presented_stim = 1 # just one stimulus in the middle of the pool for best visualization
+                            
+                                # loop over trials of [defining R neurons + applying gain]
+                                for t in np.arange(self.N_trials_attention):
+                                    
+                                    
+                                    stim_vals = np.full((self.S_N_pools), np.nan)
+                                    
+                                    # === Step 1 === #
+                                    # present to-be-attended stimulus in Pool 0
+                                    # shift a little so that we can see it better on the raster plot
+                                    # attStimVal = int(self.S_N_neuron/N_stim_main*attStim+self.S_N_neuron/8*2) 
+                                    # change how much to shift based on the attStimShift value
+                                    attStimVal = int(self.S_N_neuron/N_stim_main*attStim)+int(self.S_N_neuron/shiftStep*attStimShift) 
+                                    stim_vals[0] = attStimVal
+                                    # if t==0 and r_prop==0 and r_cnt==0:
+                                    #     print('To-be-attended: '+str(attStimVal))
+                                    # int(self.S_N_neuron/2*ps+self.S_N_neuron/8*2 - self.S_N_neuron/2)
+                                    
+                                    # compute generic stimulus shape
+                                    self.stim_drive = self.define_stims(10) # stim_strength manually set to 10
+                                    
+                                    # roll to the right place
+                                    stims = self.roll_stims(stim_vals) # S_N_pools x S_N_neuron matrix of stims
+                                    
+                                    ## Present 1 Stim and 
+                                    # reset network
+                                    restore('initialized')
+                                    
+                                    base_in = self.baseline_input()
+                                    
+                                    # present stimulus
+                                    S_pools.Stim = stims + base_in
+                                    run(self.StimExposeTime)
+                                    # sort random neurons by their firing rate
+                                    sort_ind_F = np.argsort(R_state.R_rate[:,-1], axis=0) # current state of firing
+                                    # stim_ind = np.zeros(self.R_N_neuron)
+                                    # R_NumNeuronsToStim = int(np.floor(self.R_StimProportion * self.R_N_neuron))
+                                    # stim_ind[sort_ind[self.R_N_neuron - R_NumNeuronsToStim : -1]] = R_stim
+                                    
+                                    # reset network
+                                    # S_pools.Stim = base_in
+                                    # run(self.StimExposeTime)
+                                    restore('initialized')
+                                    # ============== #
+                                    
+                                    # === Step 2 === #
+                                    # define spatial selectivity based on weights
+                                    # R_to_S_con_mat : np.array (R_N_neuron x S_N_neuron * S_N_pools matrix)
+                                    # attPool=0 # for now
+                                    mean_w = np.mean(R_to_S_con_mat[:,self.S_N_neuron*attPool:self.S_N_neuron*(attPool+1)],axis=1)
+                                    sort_ind_S = np.argsort(mean_w, axis=0) # sort by largest aggregate weight for this attPool
+                                    
+                                    # this is what gets fed to the R_pool
+                                    stim_ind = np.zeros(self.R_N_neuron)
+                                    R_NumNeuronsToStim = int(np.floor(self.R_StimProportion * self.R_N_neuron))
+                                    # print(R_NumNeuronsToStim, R_stim)
+                                    print(R_stim_S)
+                                    if R_stim_S != 0:
+                                        stim_ind[sort_ind_S[self.R_N_neuron - R_NumNeuronsToStim : -1]] = R_stim_S
+                                    
+                                    # apply spatial attention only
+                                    base_in = self.baseline_input()
+                                    S_pools.Stim = base_in
+                                    R_pool.Stim = stim_ind
+                                    run(self.StimExposeTime)
+                                        
+                                    # ============== #
+                                        
+                                    # === Step 3 === #
+                                    self.stim_drive = self.define_stims(self.StimStrength) # define again with actual stimulus strength
+                                    # present two stimuli at the same time
+                                    plotStim  = 0
+                                    # if attStim==0 and t==0 and r_prop==0 and r_cnt==0:
+                                    #     plotStim = 1
+                                    stims = self.roll_stims_main(shiftStep,plotStim,attStimShift)
+                                    
+                                    # apply stimulus & top-down gain
+                                    S_pools.Stim = stims + base_in
+                                    R_pool.Stim = stim_ind
+                                    run(self.StimExposeTime)
+                                    # ============== #
+                                    
+                                    # === Step 4 === #
+                                    # add in feature-based attention gain - important to not reset/overwrite spatial attention
+                                    stim_ind[sort_ind_F[self.R_N_neuron - R_NumNeuronsToStim : -1]] += R_stim_F # additive
+                                    
+                                    # apply stimulus & both spatial and feature-based top-down gain
+                                    S_pools.Stim = stims + base_in
+                                    R_pool.Stim = stim_ind
+                                    run(self.AttnTime)
+                                    # ============== #
+                                    
+                                    # record FR
+                                    S_fr_avg_main[tc,:,r_cnt_F,r_cnt_S] = np.mean(S_state.S_rate[:,-5:],axis=1) # average FR for the last 5 timesteps (trial,neurons)
+                                    label_stim_main[tc] = attStimVal # attended stimulus label
+                                    label_trial_main[tc] = t
+                                    label_attPool_main[tc] = attPool
+                                    label_stim_strength_main[tc] = self.StimStrength
+                                    
+                                    if self.doPlot:
+                                        if t == 0:
+                                            self.plt_raster_att(S_spike, 'Sensory',attStim)
+                                            
+                                    #------------------------------------------------
+                                    # get predicted ang,abs of vector over each time window (tw) in the trial for each pool...
+                                    # use the firing rates computed and stored in the StateMonitor(S_state)
+                                    #------------------------------------------------
+                                    stim_vals_decode = np.tile(stim_vals[0],self.S_N_pools) # pretend we are decoding presented stimulus from all pools
+                                    for tw in np.arange(nTimeSteps):
+                                        fr_angle[tc,:,tw,r_cnt_F,r_cnt_S], fr_abs[tc,:,tw,r_cnt_F,r_cnt_S], fr_att_abs[tc,:,tw,r_cnt_F,r_cnt_S] = self.get_fr_vector(S_state.S_rate[:,tw], stim_vals_decode)
+                                        
+                                    if (t == 0):
+                                        timepoints = np.array(S_spike.t/ms)
+                                        spikes = np.array(S_spike.i)
+                                        spike_arr = np.vstack((timepoints, spikes))
+                                        S_AttentionTask[r_cnt_F,r_cnt_S,ss_cnt,attStim] = spike_arr
+                                        
+                                        timepoints = np.array(R_spike.t/ms)
+                                        spikes = np.array(R_spike.i)
+                                        spike_arr = np.vstack((timepoints, spikes))
+                                        R_AttentionTask[r_cnt_F,r_cnt_S,ss_cnt,attStim] = spike_arr
+                                    
+                                    
+                                    tc+=1 # increase global trial counter
+                                    
+        # save out spike info for drawing raster plots                        
+        # raster_dic = {'S_AttentionTask':S_AttentionTask,'R_AttentionTask':R_AttentionTask,\
+        #               'r_stim_amps_F':self.r_stim_amps_F,'r_stim_amps_S':self.r_stim_amps_S, 's_stim_amps':self.s_stim_amps,\
+        #                   'keys':'Attention[r_stim_amp_F,r_stim_amps_S,stim_strength,attStim]'}
+        # savemat('figure/FxS_raster_kappa-'+str(rand_kappa)+'.mat',raster_dic)
+        # print('Saved figure/FxS_raster_kappa-'+str(rand_kappa)+'.mat')
                 
         
         #------------------------------------------------        
@@ -1404,5 +1489,5 @@ class rand_attn_inh:
         #if sys.platform != 'darwin':
         gcPython.collect()
 
-        return S_fr_avg_loc, label_stim_loc, label_pool_loc, label_trial_loc, S_fr_avg_main, label_stim_main, label_trial_main, fr_angle, fr_abs, fr_att_abs
+        return S_fr_avg_loc, label_stim_loc, label_pool_loc, label_trial_loc, S_fr_avg_main, label_stim_main, label_trial_main, fr_angle, fr_abs, fr_att_abs, label_attPool_main, label_stim_strength_main
 
