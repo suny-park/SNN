@@ -1,46 +1,27 @@
-# for VSS2023
-# Present two stimuli to the first pool, no stimulus presented to other pools
-# Apply top-down gain to one of the two stimulus, 
-# by gain to random neurons preferring that stimulus
-# Decode attended stimulus.
+# TODO: 
+# add task overview at the top
+# check what's used from numpy.matlib?
 
-# Implemented localizer task
+# Feature-based Attention Simulation in a Spiking Neural Network Model
+# Present two stimuli to the first sub-netwok (no stimulus presented to others)
+# Apply top-down gain to second layer for one of the two stimulus.
+
+# Sensory Task
 # 1: Initialize network and connections
 # 2: Present one out of 16 equally spaced stimuli (in all pools or one pool at a time?) 
 # - to record responses to each stimulus and use for decoding
-# RESET
-# 3: 
-# need to do this before importing brian2
-thisrep = input("Which rep? ")
-thisrep = int(thisrep)
+# 3: RESET
+
+# Attention Task
+
 
 from brian2 import *
-import matplotlib.pyplot as plt
 import numpy as np
 from numpy import pi
-from scipy.stats import circmean
 import os.path
 from os import path
-# import brian2genn
-import numpy.matlib
 
-
-# os.chdir("C:\Users\boss\OneDrive - UC San Diego\Lab\RNN project\forVSS\result_figure")
-# import SVC classifier
-from sklearn.svm import SVC
-# import metrics to compute accuracy
-from sklearn.metrics import accuracy_score
-# split X and y into training and testing sets
-from sklearn.model_selection import train_test_split
-
-from circ_reg_fromJohn import *
-from circ_corr import *
-
-
-#%%
-
-# need this to use genn
-# set_device('genn')
+from srnn_iter_feature import * # Make sure this is the one we want!!
 
 #-------------------------
 # number of neurons in sensory and random layers
@@ -115,30 +96,18 @@ BaselineScale = 0
 #-------------------------
 # stimulus strength and precision
 #-------------------------
-# StimStrength = 10  # set in code below
-kappa = 14         # BB2019 used a gaussian...i am using a von Mises and kappa == 14 approximates the std of their gaussian
+kappa = 14         # for von Mises
 StimToZero = 3     # stim input goes to 0 <> StimToZero stds from mu 
-
-#-------------------------
-# pick rand stim values or pick from 
-# S_N_num_stimvals discrete values?
-# use for conditional decoding in rand network
-#-------------------------
-StimRandOrFixed = 1    # if StimRandOrFixed == 1, then pick from from a discrete set of stim values, otherwise random picks
-# S_N_num_stimvals = 1  # how many discrete values to pick from?                
-# S_stim_pools = [3]   #which pools to present stims too...set below
 
 #-------------------------
 # stim exposure time (in seconds)
 #-------------------------
 StimExposeTime = 0.3 * second  
-# StimExposeTime = 1.0 * second  
 
 #-------------------------
-# WM delay period (in seconds) - stim goes to baseline during this interval...
+# Attention Task stimulus time (in seconds)
 #-------------------------
 AttnTime = 1.0 * second
-# AttnTime = 0.3 * second
 
 #------------------------------------------------ 
 # synaptic params for recurrent connections in sensory pools, hence these all have the 'S_' prefix
@@ -148,7 +117,7 @@ S_rec_w_amp_exc = 2      # amp of excitatory connections
 S_rec_w_kappa_exc = 3    # dispersion of excitatory connections
 S_rec_w_amp_inh = 2      # amp of inhibitory connections
 S_rec_w_kappa_inh = .83  # dispersion of inhibitory connections, higher is less dispersion, less interference between stimuli -- .83 - 8/28/24
-S_Excitation = False     #  self excitation? True/False (False default). If False, then zero out main diag of w mat
+S_SelfExcitation = False     #  self excitation? True/False (False default). If False, then zero out main diag of w mat
 
 #------------------------------------------------ 
 # synaptic params for recurrent connections in random layer, hence these all have the 'R_' prefix
@@ -167,18 +136,8 @@ else:
     R_rec_w_kappa_exc = 0
     R_rec_w_amp_inh = 0
     R_rec_w_kappa_inh = 0
-    
-R_Excitation = False     #  self excitation? True/False (False default). If False, then zero out main diag of w mat
 
-#------------------------------------------------ 
-# if laterally connecting the sensory pools - only excitatory
-# with amp and prob specified here. These connections will 
-# only be between corresponding neurons in each pool 
-# (i.e. S.connect(j='i') and vice-versa)
-#------------------------------------------------ 
-# S_connect_pools = 0
-S_pools_to_S_pools_w_amp = 1
-S_pools_to_S_pools_proportion = 1
+R_SelfExcitation = False     #  self excitation? True/False (False default). If False, then zero out main diag of w mat
 
 #------------------------------------------------ 
 # synaptic params for sensory-to-random layer connections
@@ -194,100 +153,68 @@ R_to_S_target_w = 0.2    # feedback weight before balancing (beta from equations
 R_to_S_ei_balance = -1   # -1 is perfectly balanced feedback E/I ratio
 R_to_S_baseline = 0
 
-exc_con_prob = 0.35       # this is gamma from BB2019, or the prob of excitatory connections
+exc_con_prob = 0.35       # prob of excitatory connections
 
 weight_factor = 1000.0    # factor for computing weights - make float here (and double check that in class def to enforce)
 
 #-------------------------
 # Run a simulation
 #-------------------------
-doPlot = 0 # plot stuff as we go - recommended for a first run
+doPlot = 1 # plot stuff as we go - recommended for a first run
 saveFile = 1 # save file or not
-S_connect_pools = 0 # connect between first layer sub-networks
+saveSpikeDat = 0 # save spike data for drawing raster plots offline
 
-# stim_strengths = np.arange(0,20) #[9] # strength of bottom-up stimulus
-stim_strengths = [10]
-# r_stim_amps = [0,2,4,6,8] #np.arange(0,8) # strength of top-down gain
-r_stim_amps = [0]
-# r_stim_amps = [10,12,14,16,18]
-r_stim_ratios = [0.2] # proportion of second layer units to apply top-down gain
-# r_conn_kappas = [0,0.1,0.2,0.3,0.4] # spread of between-layer connections. higher value means more structure
-r_conn_kappas = [0.1]
+stim_strengths = np.arange(0,20) # strength of bottom-up stimulus
+r_stim_amps = np.arange(0,20,2) # strength of top-down gain
+r_stim_ratios = [0.2] # proportion of second layer units to apply top-down gain - fixed to .2
+r_conn_kappas = [0,0.1,0.2,0.3,0.4] # spread of between-layer connections. higher value means more structure
 
-# N_trials_sensory = 100 # separate values for sensory and attention task trials
-# N_trials_attention = 50 # fixed at one stimulus pair, so need more trials
-
-N_trials_sensory = 0 # separate values for sensory and attention task trials
-N_trials_attention = 50 # fixed at one stimulus pair, so need more trials
+N_trials_sensory = 100 # number of trials for the sensory task
+N_trials_attention = 50 # number of trials for the attention task
 
 N_stim_loc = 16 # number of stimuli in the sensory task
 N_stim_main = 2 # number of stimuli in the attention task
 
-from datetime import datetime
-now = datetime.now()
-# dd/mm/YY H:M:S
-date_string = now.strftime("%m%d%Y_%H%M%S")
+shiftStep = 32 # number of steps to shift the stimulus pair in the attention task
+shiftReps = 1 # used to be 16 - don't shift and keep attStimShift at 8
 
-    
-#%% Try looping td parameters within the function - to minimize initializing and running sensory task
-from srnn_iter_feature import * # Make sure this is the one we want!!
-# print('Stim Strength levels:',len(stim_strengths))
-
-# for figures
-# r_stim_amps = [0,2,4,6,8] # strength of top-down gain
-# r_conn_kappas = [0,0.1,0.2,0.3,0.4] # spread of between-layer connections. higher value means more structure
-# N_trials_sensory = 1 # separate values for sensory and attention task trials
-# N_trials_attention = 1 # we loop over 16 stimulus pairs for attention task, so can go with lower trial numbers
-# attStimShift is fixed to [8] in srnn_iter_feature.py
-
-N_reps = 1 # initialize networks across reps - this is also the random seed value
-shiftStep = 32
-shiftReps = 1 #16 - don't shift and keep shiftStep at 8
-# attStimShift = 9
 for rand_kappa in r_conn_kappas:
-# for rep in np.arange(N_reps):
-    # for rep in np.arange(N_reps):
-    rep=thisrep
-# for rep in [10]:
+
+    rep=1
     t = time.time()
-    print('running kappa '+str(rand_kappa)+ ' out of '+str(len(r_conn_kappas))+' total')
+
     #-------------------------
     # Set rnd seed so that can repeat model...important! deterministic from here on out...
     #-------------------------
     rndSeed = rep
-# for ss_cnt, StimStrength in enumerate(stim_strengths): 
-    # StimStrength = stim_strengths[0]  
+
     #-------------------------
     # init params for the model
     #-------------------------
     init_params = {'rndSeed' : rndSeed, 'N_trials_sensory' : N_trials_sensory, 'N_trials_attention' : N_trials_attention, 
-                  'S_N_neuron' : S_N_neuron, 'S_N_pools' : S_N_pools, 
-                  'R_N_neuron' : R_N_neuron, 'S_connect_pools' : S_connect_pools,
-                  'StimRandOrFixed' : StimRandOrFixed,
+                  'S_N_neuron' : S_N_neuron, 'S_N_pools' : S_N_pools, 'R_N_neuron' : R_N_neuron, 
                   'S_eqs' : S_eqs, 'R_eqs' : R_eqs, 'S_tau' : S_tau, 'R_tau' : R_tau,
-                  'S_bias' : S_bias, 'R_bias' : R_bias, 'S_InitSynRange' : S_InitSynRange,
-                  'R_InitSynRange' : R_InitSynRange,
+                  'S_bias' : S_bias, 'R_bias' : R_bias, 
+                  'S_InitSynRange' : S_InitSynRange,'R_InitSynRange' : R_InitSynRange,
                   'TimeStepForRecording' : TimeStepForRecording, 'NumTimeStepsToAnalyze' : NumTimeStepsToAnalyze,
                   'StimExposeTime' : StimExposeTime, 'AttnTime' : AttnTime,
                   'S_tf_slope' : S_tf_slope, 'R_tf_slope' : R_tf_slope, 'BaselineScale' : BaselineScale,
-                  'kappa' : kappa,
-                  'StimToZero' : StimToZero,
+                  'kappa' : kappa, 'StimToZero' : StimToZero,
                   'S_rec_w_baseline' : S_rec_w_baseline, 'S_rec_w_amp_exc' : S_rec_w_amp_exc, 
                   'S_rec_w_kappa_exc' : S_rec_w_kappa_exc, 'S_rec_w_amp_inh' : S_rec_w_amp_inh, 
-                  'S_rec_w_kappa_inh' : S_rec_w_kappa_inh, 'S_Excitation' : S_Excitation,
+                  'S_rec_w_kappa_inh' : S_rec_w_kappa_inh, 'S_SelfExcitation' : S_SelfExcitation,
                   'R_rec_w_baseline' : R_rec_w_baseline, 'R_rec_w_amp_exc' : R_rec_w_amp_exc, 
                   'R_rec_w_kappa_exc' : R_rec_w_kappa_exc, 'R_rec_w_amp_inh' : R_rec_w_amp_inh, 
-                  'R_rec_w_kappa_inh' : R_rec_w_kappa_inh, 'R_Excitation' : R_Excitation,
+                  'R_rec_w_kappa_inh' : R_rec_w_kappa_inh, 'R_SelfExcitation' : R_SelfExcitation,
                   'S_to_R_target_w' : S_to_R_target_w, 'S_to_R_ei_balance' : S_to_R_ei_balance, 
                   'S_to_R_baseline' : S_to_R_baseline, 'R_to_S_target_w' : R_to_S_target_w, 
                   'R_to_S_ei_balance' : R_to_S_ei_balance, 'R_to_S_baseline' : R_to_S_baseline,
                   'exc_con_prob' : exc_con_prob, 'weight_factor' : weight_factor, 
-                  'S_pools_to_S_pools_w_amp' : S_pools_to_S_pools_w_amp, 
-                  'S_pools_to_S_pools_proportion' : S_pools_to_S_pools_proportion, 
                   'doPlot' : doPlot,
                   'N_stim_loc': N_stim_loc,'N_stim_main' : N_stim_main,
                   'stim_strengths' : stim_strengths, 'r_stim_amps' : r_stim_amps, 'r_stim_ratios' : r_stim_ratios,
-                  'shiftStep':shiftStep, 'shiftReps':shiftReps,'rand_kappa':rand_kappa}
+                  'shiftStep':shiftStep, 'shiftReps':shiftReps,'rand_kappa':rand_kappa,
+                  'saveSpikeDat':saveSpikeDat}
 
     #-------------------------
     # init the model object
@@ -300,10 +227,9 @@ for rand_kappa in r_conn_kappas:
     S_fr_avg_loc, label_stim_loc, label_pool_loc, label_trial_loc, \
         S_fr_avg_main, label_stim_main, label_trial_main, \
             fr_angle, fr_abs, fr_att_abs, label_stim_strength_main = M.run_sim_rand()
-    #fn_decoding = 'sim_decoding/FBA_decoding_Rep0.npz'
-    #fn_decoding = 'FBA_decoding_shift_Rep'+str(rep)+'.npz'
-    # fn_decoding = 'results/F_higher-Rstim_kappa-'+str(rand_kappa)+'_seed-'+str(rep)+'.npz'
-    fn_decoding = 'results/F_test-baseline_kappa-'+str(rand_kappa)+'_seed-'+str(rep)+'.npz'
+    
+    fn_decoding = 'results/F_kappa-'+str(rand_kappa)+'_seed-'+str(rep)+'.npz'
+
     if saveFile:
         np.savez(fn_decoding, S_fr_avg_loc=S_fr_avg_loc, label_stim_loc=label_stim_loc, \
                  label_pool_loc=label_pool_loc, label_trial_loc=label_trial_loc, \
@@ -311,26 +237,9 @@ for rand_kappa in r_conn_kappas:
                          label_trial_main=label_trial_main, N_stim_loc=N_stim_loc, \
                              r_stim_amps=r_stim_amps, r_stim_ratios=r_stim_ratios, stim_strengths=stim_strengths, \
                                      N_trials_sensory=N_trials_sensory,N_trials_attention=N_trials_attention,S_N_pools=S_N_pools,S_N_neuron=S_N_neuron, \
-                                         fr_angle=fr_angle, fr_abs=fr_abs, fr_att_abs=fr_att_abs, label_stim_strength_main=label_stim_strength_main)
+                                         label_stim_strength_main=label_stim_strength_main)
         print('Saved '+fn_decoding)
                             
     elapsed = time.time() - t
     print(round(elapsed/60),'min Elapsed')
         
-        # print(fr_att_abs[1,:,-1,:,0])
-       
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
