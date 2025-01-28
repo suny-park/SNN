@@ -1,6 +1,6 @@
-#%%
-# change working directory to where all my functions are
-# os.chdir('/mnt/neurocube/local/serenceslab/sunyoung/RNN/results')
+#%% analyze_feature.py
+# Takes npz output files and runs decoding analyses for feature-based 
+# attention simulations. Saves out mat files for plotting figures in Matlab.
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -19,18 +19,15 @@ from scipy.special import i0, i1
 
 from scipy.io import savemat
 
-
+# set working directory to where the helper scripts exist
 os.chdir('/mnt/neurocube/local/serenceslab/sunyoung/RNN/')
-
-from circ_reg_fromJohn import *
-from circ_corr import *
+from helper_codes import *
 
 nComp=1000 # for circ corr
-# nRep = 10
+
 save_all_kpa=0
 doPlot=0
 
-# reps = [1]
 #%%
 # figure stuff
 plotAllReps = 0
@@ -38,15 +35,13 @@ doSave = 0
 figDPI = 300
 fileFormat = 'eps'
 
+nRep = 10
+reps = np.arange(1,nRep+1) # 1 - 10
+
 # kappas = [0,0.1,0.2,0.3,0.4]
 kappas = [0,0.1]
 
 for rand_kappa in kappas:
-# rand_kappa = 0
-    nRep = 10
-    reps = np.arange(1,nRep+1) # 1 - 16
-    
-    # os.chdir('/mnt/neurocube/local/serenceslab/sunyoung/RNN/')
     # load one file to grab basic parameters
     dataFile = 'results/F_kappa-'+str(rand_kappa)+'_seed-1.npz'
     print('Loading '+dataFile)
@@ -81,83 +76,87 @@ for rand_kappa in kappas:
     S_fr_avg_main = np.concatenate((S_fr_avg_main,data['S_fr_avg_main']),axis=2)
     
     
-    # #%% Analysis 1
-    # # Train and test within localizer task for a sanity check
-    # # define empty matrices to store predicted & actual values for each pool
+    #%% Analysis 1
+    # Train and test within sensory task for a sanity check
+    # This takes a while to run...
     
-    # # loop over network initialization reps and load saved file
-    # decoding1 = np.full((N_trials_sensory*N_stim_loc,S_N_pools,2,nRep),np.nan) # test and predicted label for (all trials X pools)
-    # MAE1 = np.full((S_N_pools,nRep),np.nan)
-    # for rep_cnt, rep in enumerate(reps):
-    #     dataFile = 'results/F_kappa-'+str(rand_kappa)+'_seed-'+str(rep)+'.npz'
-    #     print('Loading '+dataFile)
-    #     data = np.load(dataFile)
+    # define empty matrices to store predicted & actual values for each pool
+    decoding1 = np.full((N_trials_sensory*N_stim_loc,S_N_pools,2,nRep),np.nan) # test and predicted label for (all trials X pools)
+    MAE1 = np.full((S_N_pools,nRep),np.nan)
+    
+    # loop over network initialization reps and load saved file
+    for rep_cnt, rep in enumerate(reps):
+        dataFile = 'results/F_kappa-'+str(rand_kappa)+'_seed-'+str(rep)+'.npz'
+        print('Loading '+dataFile)
+        data = np.load(dataFile)
         
-    #     # load variables
-    #     S_fr_avg_loc=data['S_fr_avg_loc']
-    #     label_stim_loc=data['label_stim_loc']
-    #     label_pool_loc=data['label_pool_loc']
-    #     label_trial_loc=data['label_trial_loc']
+        # load variables
+        S_fr_avg_loc=data['S_fr_avg_loc']
+        label_stim_loc=data['label_stim_loc']
+        label_pool_loc=data['label_pool_loc']
+        label_trial_loc=data['label_trial_loc']
         
-    #     N_stim_loc=data['N_stim_loc']
+        N_stim_loc=data['N_stim_loc']
         
-    #     stim_strengths=data['stim_strengths']
+        stim_strengths=data['stim_strengths']
         
-    #     N_trials_sensory=data['N_trials_sensory']
+        N_trials_sensory=data['N_trials_sensory']
         
-    #     S_N_pools=data['S_N_pools']
-    #     S_N_neuron=data['S_N_neuron']
+        S_N_pools=data['S_N_pools']
+        S_N_neuron=data['S_N_neuron']
         
-    #     # convert label (0-511) to degrees (0-2pi, 0-359)
-    #     label_stim_loc_deg = (label_stim_loc/S_N_neuron*360).astype(int)
+        # convert label (0-511) to degrees (0-2pi, 0-359)
+        label_stim_loc_deg = (label_stim_loc/S_N_neuron*360).astype(int)
         
-    #     # sig1 = np.full((S_N_pools,2),np.nan) # to bucket circ corr coef and p_vals
-        
-    #     for thispool in range(S_N_pools):
-    #         pool_idx = np.arange(thispool*S_N_neuron,(thispool+1)*S_N_neuron) # indices of neurons in thispool
-    #         poolX = S_fr_avg_loc[label_pool_loc==thispool,:] # subset trials when this pool was stimulated
-    #         poolX = poolX[:,pool_idx] # subset neurons within this pool
+        # loop over each sub-network
+        for thispool in range(S_N_pools):
+            pool_idx = np.arange(thispool*S_N_neuron,(thispool+1)*S_N_neuron) # indices of neurons in thispool
+            poolX = S_fr_avg_loc[label_pool_loc==thispool,:] # subset trials when this pool was stimulated
+            poolX = poolX[:,pool_idx] # subset neurons within this pool
             
-    #         trial_idx_pool = label_trial_loc[label_pool_loc==thispool] # subset trials when this pool was stimulated
-    #         y_pool = label_stim_loc_deg[label_pool_loc==thispool] # subset trials when this pool was stimulated
-    #         for cv_iter in np.unique(trial_idx_pool): # loop over N_trials to leave out one trial per stimulus
-    #             trnX = poolX[trial_idx_pool!=cv_iter,:]
-    #             trny = y_pool[trial_idx_pool!=cv_iter]
-                
-    #             tstX = poolX[trial_idx_pool==cv_iter,:]
-    #             tsty = y_pool[trial_idx_pool==cv_iter]
-                
-    #             my_model = compute_reg_weights(trnX,trny) # Circular regression with empirical bayes ridge
-    #             pred = decode_reg(my_model,tstX)
-                
-    #             pred_deg = pred/np.pi*180 # convert radians back to degrees
-                
-    #             # store test & predicted labels and store them for visualization later
-    #             pred_deg[np.abs(tsty-pred_deg)>180] = np.abs(pred_deg[np.abs(tsty-pred_deg)>180]-360)
-    #             decoding1[trial_idx_pool==cv_iter,thispool,0,rep_cnt] = tsty
-    #             decoding1[trial_idx_pool==cv_iter,thispool,1,rep_cnt] = pred_deg
-                
-    #         # get circular correlation coefficient and p values and store them
-    #         # sig1[thispool,0], sig1[thispool,1] = circ_corr_pval(decoding1[:,thispool,0,rep],decoding1[:,thispool,1,rep],nComp,get_full=False)
+            trial_idx_pool = label_trial_loc[label_pool_loc==thispool] # trial index
+            y_pool = label_stim_loc_deg[label_pool_loc==thispool] # actual stimulus label
             
-    #         # get MAE
-    #         MAE1[thispool,rep_cnt] = circ_MAE(decoding1[:,thispool,0,rep_cnt]/180*pi,decoding1[:,thispool,1,rep_cnt]/180*pi)*180/pi # TODO: check on this function
+            # loop over trials to leave out one trial per stimulus
+            for cv_iter in np.unique(trial_idx_pool): 
+                trnX = poolX[trial_idx_pool!=cv_iter,:] # train data
+                trny = y_pool[trial_idx_pool!=cv_iter] # train label
+                
+                tstX = poolX[trial_idx_pool==cv_iter,:] # test data
+                tsty = y_pool[trial_idx_pool==cv_iter] # test label
+                
+                # Circular regression with empirical bayes ridge (from helper_codes.py)
+                my_model = compute_reg_weights(trnX,trny) 
+                pred = decode_reg(my_model,tstX)
+                
+                pred_deg = pred/np.pi*180 # convert radians back to degrees
+                
+                # store test & predicted labels for visualization
+                pred_deg[np.abs(tsty-pred_deg)>180] = np.abs(
+                    pred_deg[np.abs(tsty-pred_deg)>180]-360) # wrapping degrees around the circular space
+                decoding1[trial_idx_pool==cv_iter,thispool,0,rep_cnt] = tsty
+                decoding1[trial_idx_pool==cv_iter,thispool,1,rep_cnt] = pred_deg
+                
+            # calculate mean absolute error (MAE) (from helper_codes.py)
+            MAE1[thispool,rep_cnt] = circ_MAE(
+                decoding1[:,thispool,0,rep_cnt]/180*pi,
+                decoding1[:,thispool,1,rep_cnt]/180*pi)*180/pi
     
-    # print(np.mean(np.mean(MAE1,axis=0)))
+    print(np.mean(np.mean(MAE1,axis=0)))
     
-    # # plot predictions collapsed across all sub-networks
-    # if doPlot:
-    #     plt.figure(figsize=(4,4))
-    #     plt.scatter(decoding1[:,:,0,:].flatten(),decoding1[:,:,1,:].flatten(),c='k',alpha=0.01)
-    #     plt.xlabel('Presented Stimulus')
-    #     plt.ylabel('Predicted Stimulus')
-    #     plt.xticks(ticks=np.linspace(0,360,5))
-    #     plt.yticks(ticks=np.linspace(0,360,5))
-    #     plt.ylim([-10,370])
-    #     plt.xlim([-10,370])
-    #     if doSave==1:
-    #         plt.savefig('fig1.'+fileFormat, dpi=figDPI,bbox_inches='tight',format=fileFormat)
-    #     plt.show()
+    # plot predictions collapsed across all sub-networks
+    if doPlot:
+        plt.figure(figsize=(4,4))
+        plt.scatter(decoding1[:,:,0,:].flatten(),decoding1[:,:,1,:].flatten(),c='k',alpha=0.01)
+        plt.xlabel('Presented Stimulus')
+        plt.ylabel('Predicted Stimulus')
+        plt.xticks(ticks=np.linspace(0,360,5))
+        plt.yticks(ticks=np.linspace(0,360,5))
+        plt.ylim([-10,370])
+        plt.xlim([-10,370])
+        if doSave==1:
+            plt.savefig('fig1.'+fileFormat, dpi=figDPI,bbox_inches='tight',format=fileFormat)
+        plt.show()
     
     #%% Analysis 2
     # Train model with localizer task to classify presented stimulus (16-way)
@@ -605,82 +604,7 @@ for rand_kappa in kappas:
     
     #%% Plot CRF for different kappas
     
-def fitCRF2(x,y,doPlot):
-    # Naka-Rushton equation from Sirawaj's paper
-    # G_r: multiplicative response gain - since all CRFs asymptote at 80Hz, this should be constant
-    # G_c: contrast gain factor that controls the horizontal shift of the CRF ** this is what we want to know
-    # b: response baseline offset - can be fixed as the average of the minimum amplitude across all experimental conditions
-    # q: exponent that controls the speed at which the CRF rises and reaches asymptote
-    # Gr and Gc were constrained so that they could not be less than 0 and 1, respectively.
-    # The exponent q was also constrained within a range of -10 to 10.
-    # We used the 30% contrast value (about half of 61.66% contrast) as the initial seed value for Gc, 
-    # the difference between maximum and minimum responses as the seed value for Gr, 
-    # and 1 and 5 for the seed values of the exponent q when fitting the CRFs based on the P1 and the LPD (see below for LPD), respectively. 
-    # The initial seed values for the exponent q were adopted from the estimated values based on a previous study
-    # 0%, 2.24%, 5.13%, 11.75%, 26.92%, and 61.66%
-    # R = G_r*c**q/(c**q+G_c**q)+b
-    import scipy.optimize 
-    
-    # parameters for the equation
-    b = np.min(y) # baseline offset
-    G_r = np.max(y)-np.min(y) # multiplicative gain
-    bnd_q=(-10,10) # controls the steepness
-    bnd_G_c=(-1,1) # horizontal shift
-    step_q=0.1
-    step_G_c=0.01
-    range_q = np.arange(bnd_q[0],bnd_q[1]+step_q,step_q)
-    range_G_c = np.arange(bnd_G_c[0],bnd_G_c[1]+step_G_c,step_G_c)
-    grid_rss = np.full((len(range_q), len(range_G_c)),np.nan)
-    
-    # define the equation
-    def CRF(params,x):
-        q=params[0]
-        G_c=params[1]
-        x = x.astype(float)
-        R = G_r*(x**q)/(x**q+G_c**q)+b
-        return R
-    
-    # a general use RSS function
-    def rss_fun(fun):
-        def loss_fun(params,x,y):
-            return np.sqrt(np.mean((y-fun(params,x))**2))
-        return loss_fun
-    
-    correction_fun = rss_fun(CRF)
-    
-    for cnt_q, q in enumerate(range_q):
-        for cnt_G_c, G_c in enumerate(range_G_c):
-            grid_rss[cnt_q,cnt_G_c] = correction_fun((q,G_c),x,y)
-            
-    # plt.imshow(grid_rss)
-    # plt.colorbar()
-    # plt.show()
 
-    rss_flat = grid_rss.flatten()
-    min_idx = np.nanargmin(rss_flat)
-    q_idx = np.floor(min_idx/len(range_q)).astype(int)
-    G_c_idx = np.mod(min_idx,len(range_G_c)).astype(int)
-    # print(np.nanmin(rss_flat)==grid_rss[q_idx,G_c_idx])
-    init_q=range_q[q_idx]
-    init_G_c=range_G_c[G_c_idx]
-    
-    y_hat_grid = CRF((init_q, init_G_c),x)
-    grid_rss = np.mean((y-y_hat_grid)**2)
-    
-    this_fit = scipy.optimize.minimize(correction_fun,(init_q,init_G_c),(x,y),bounds=(bnd_q,bnd_G_c))
-    
-    y_hat = CRF(this_fit.x,x)
-    this_rss = np.mean((y-y_hat)**2)
-    
-    if doPlot == 1:
-        plt.plot(y)
-        plt.plot(y_hat_grid)
-        plt.plot(y_hat)
-        plt.title(f'grid: {grid_rss: .4}, RSS: {this_rss: .4}, G_c: {init_G_c: .2}, {this_fit.x[1]: .2}')
-        plt.legend(['Data','grid fit','Fitted'])
-        plt.show()
-        
-    return this_fit.x, this_rss
 #%%
 # for different kappa levels, it makes more sense to compare stimulated sub-network and unstimulated sub-network
 # as opposed to comparing attended vs unattended feature response within the stimulated sub-network

@@ -1126,7 +1126,7 @@ class rand_attn_inh:
                 
                     # another loop here for shifting stimulus pairs
                     # for attStimShift in np.arange(self.shiftReps):
-                    for attStimShift in [8]: # fixed at 8 for visualization
+                    for attStimShift in [8]: # fixed at 8 for better visualization
                     
                         for attStim in range(self.N_stim_main):
                             
@@ -1135,9 +1135,7 @@ class rand_attn_inh:
                                 
                                 stim_vals = np.full((self.S_N_pools), np.nan)
                                 
-                                # present to-be-attended stimulus in Pool 0
-                                # shift a little so that we can see it better on the raster plot
-                                # change how much to shift based on the attStimShift value
+                                # present to-be-attended stimulus in the first sub-network to select which neurons to apply top-down gain
                                 attStimVal = int(self.S_N_neuron/self.N_stim_main*attStim)+int(self.S_N_neuron/self.shiftStep*attStimShift) 
                                 stim_vals[0] = attStimVal
                                 
@@ -1147,10 +1145,8 @@ class rand_attn_inh:
                                 # roll to the right place
                                 stims = self.roll_stims(stim_vals) # S_N_pools x S_N_neuron matrix of stims
                                 
-                                ## Present 1 Stim and 
-                                # reset network
+                                # reset network + add baseline
                                 restore('initialized')
-                                
                                 base_in = self.baseline_input()
                                 
                                 # present stimulus
