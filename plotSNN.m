@@ -332,7 +332,7 @@ set(gcf,'color','white','position',[91   552   261   210]);
 
 %% Figure 5: CRFs, MAEs as a function of K
 kappas = [0:0.1:0.4];
-figure(7); clf;
+figure(4); clf;
 
 % FR for attended stim in stimulated and unstimulated sub-network
 load('result_F_unstimPool.mat');
@@ -354,7 +354,7 @@ for kappa = 1:nKappa
     repavg_FR_stim_att = avg_FR_stim_att(:,:,1); % average over reps
     repavg_FR_stim_unatt = avg_FR_stim_unatt(:,:,1);
     
-    %
+    % FR for attended stim in the stimulated sub-network
     subplot(3,5,kappa);
     clear h leg
     for r_amp = 1:nRAmp
@@ -374,7 +374,7 @@ for kappa = 1:nKappa
         legend(h,leg,'location','east','box','off');
     end
 
-    %
+    % FR for attended stim in the unstimulated sub-networks
     subplot(3,5,5+kappa);
     for r_amp = 1:nRAmp
         h(r_amp) = plot(stim_strengths,repavg_FR_stim_unatt(:,r_amp),'color',colors(r_amp,:),'linewidth',2,'linestyle','--','marker','x'); hold on;
