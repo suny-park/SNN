@@ -10,7 +10,17 @@ Created on Thu Apr 24 16:38:03 2025
 # attention simulations. Saves out mat files for plotting figures in Matlab.
 
 # Control - Testing multiplicative gain instead of additive
-# EveryEvery
+# Everything is the same except we're running just one rep(random seed for network initialization)
+# No sensory task, just attention task
+# When testing cross-generalization (Analysis 2), we can use sensory task data from previous simulations
+
+# OVERVIEW
+#%% Analysis 2
+    # Train the circular regression model with sensory task and test on attention task
+#%% Analysis 3 
+    # Train/test the SVM on attention task (2-way classification on which of the two stimuli was attended)
+#%% Analysis 4
+    # Train on one unstimulated sub-network and test on another unstimulated sub-network
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -36,109 +46,28 @@ from helper_codes import *
 nComp=1000 # for circ corr
 
 # figure stuff
-doPlot=0
+doPlot=1
 plotAllReps = 0 # plot data for different network initializations
 saveFig = 0 # save figures- optional since we're gonna plot again in Matlab
 figDPI = 300
 fileFormat = 'eps'
 #%%
 
-nRep = 10 # 10, network initializations
+nRep = 1 # 10, network initializations
 reps = np.arange(nRep)+1 # 1 - 10
 
-kappas = [0,0.1,0.2,0.3,0.4] # K for connectivity randomness
+kappas = [0] # [0,0.1,0.2,0.3,0.4], K for connectivity randomness
 
 # looping over all K values
 for rand_kappa in kappas:
-    #%% Analysis 1
-    # Train and test the circular regression model within sensory task for a sanity check
-    # This takes a while to run...
-    
-    # loop over network initialization reps and load saved file
-    for rep_cnt, rep in enumerate(reps):
-        dataFile = 'results/F_kappa-'+str(rand_kappa)+'_seed-'+str(rep)+'.npz'
-        print('Loading '+dataFile)
-        data = np.load(dataFile)
-        
-        # load variables
-        S_fr_avg_loc=data['S_fr_avg_loc']
-        label_stim_loc=data['label_stim_loc']
-        label_pool_loc=data['label_pool_loc']
-        label_trial_loc=data['label_trial_loc']
-        
-        N_stim_loc=data['N_stim_loc']
-        
-        stim_strengths=data['stim_strengths']
-        
-        N_trials_sensory=data['N_trials_sensory']
-        
-        S_N_pools=data['S_N_pools']
-        S_N_neuron=data['S_N_neuron']
-        
-        # convert label (0-511) to degrees (0-2pi, 0-359)
-        label_stim_loc_deg = (label_stim_loc/S_N_neuron*360).astype(int)
-        
-        # define empty matrices to store predicted & actual values for each sub-network
-        if rep_cnt == 0:
-            decoding1 = np.full((N_trials_sensory*N_stim_loc,S_N_pools,2,nRep),np.nan) # test and predicted label for (all trials X pools)
-            MAE1 = np.full((S_N_pools,nRep),np.nan)
-        
-        # loop over each sub-network
-        for thispool in range(S_N_pools):
-            pool_idx = np.arange(thispool*S_N_neuron,(thispool+1)*S_N_neuron) # indices of neurons in thispool
-            poolX = S_fr_avg_loc[label_pool_loc==thispool,:] # subset trials when this pool was stimulated
-            poolX = poolX[:,pool_idx] # subset neurons within this pool
-            
-            trial_idx_pool = label_trial_loc[label_pool_loc==thispool] # trial index
-            y_pool = label_stim_loc_deg[label_pool_loc==thispool] # actual stimulus label
-            
-            # loop over trials to leave out one trial per stimulus
-            for cv_iter in np.unique(trial_idx_pool): 
-                trnX = poolX[trial_idx_pool!=cv_iter,:] # train data
-                trny = y_pool[trial_idx_pool!=cv_iter] # train label
-                
-                tstX = poolX[trial_idx_pool==cv_iter,:] # test data
-                tsty = y_pool[trial_idx_pool==cv_iter] # test label
-                
-                # Circular regression with empirical bayes ridge (from helper_codes.py)
-                my_model = compute_reg_weights(trnX,trny) 
-                pred = decode_reg(my_model,tstX)
-                
-                pred_deg = pred/np.pi*180 # convert radians back to degrees
-                
-                # store actual & predicted labels for visualization
-                pred_deg[np.abs(tsty-pred_deg)>180] = np.abs(
-                    pred_deg[np.abs(tsty-pred_deg)>180]-360) # wrapping degrees around the circular space
-                decoding1[trial_idx_pool==cv_iter,thispool,0,rep_cnt] = tsty
-                decoding1[trial_idx_pool==cv_iter,thispool,1,rep_cnt] = pred_deg
-                
-            # calculate mean absolute error (MAE) (from helper_codes.py)
-            MAE1[thispool,rep_cnt] = circ_MAE(
-                decoding1[:,thispool,0,rep_cnt]/180*pi,
-                decoding1[:,thispool,1,rep_cnt]/180*pi)*180/pi
-    
-    # print average MAE for this kappa
-    print(np.mean(np.mean(MAE1,axis=0)))
-    
-    # plot actual & predicted labels collapsed across all sub-networks
-    if doPlot:
-        plt.figure(figsize=(4,4))
-        plt.scatter(decoding1[:,:,0,:].flatten(),decoding1[:,:,1,:].flatten(),c='k',alpha=0.01)
-        plt.xlabel('Presented Stimulus')
-        plt.ylabel('Predicted Stimulus')
-        plt.xticks(ticks=np.linspace(0,360,5))
-        plt.yticks(ticks=np.linspace(0,360,5))
-        plt.ylim([-10,370])
-        plt.xlim([-10,370])
-        if saveFig==1:
-            plt.savefig('fig1.'+fileFormat, dpi=figDPI,bbox_inches='tight',format=fileFormat)
-        plt.show()
     
     #%% Analysis 2
     # Train the circular regression model with sensory task and test on attention task
     
     # loop over network initialization reps and load saved file
+
     for rep_cnt, rep in enumerate(reps):
+        # load sensory task data from OG simulations
         dataFile = 'results/F_kappa-'+str(rand_kappa)+'_seed-'+str(rep)+'.npz'
         print('Loading '+dataFile)
         data = np.load(dataFile)
@@ -148,30 +77,30 @@ for rand_kappa in kappas:
         label_stim_loc=data['label_stim_loc']
         label_pool_loc=data['label_pool_loc']
         label_trial_loc=data['label_trial_loc']
+
+        N_stim_loc=data['N_stim_loc']
         
+        N_trials_sensory=data['N_trials_sensory']
+        
+        S_N_pools=data['S_N_pools']
+        S_N_neuron=data['S_N_neuron']
+
+        # load attention task data from multiplicative gain simulations
+        dataFile = 'results/F_mult_kappa-'+str(rand_kappa)+'_seed-'+str(rep)+'.npz'
+        print('Loading '+dataFile)
+        data = np.load(dataFile)
+        
+        # load variables
         S_fr_avg_main= data['S_fr_avg_main']
         label_stim_main= data['label_stim_main']
         label_trial_main=data['label_trial_main']
         label_stim_strength_main=data['label_stim_strength_main']
         
-        N_stim_loc=data['N_stim_loc']
-        
         r_stim_amps=data['r_stim_amps']
         r_stim_ratios=data['r_stim_ratios']
         stim_strengths=data['stim_strengths']
-        
-        N_trials_sensory=data['N_trials_sensory']
+
         N_trials_attention=data['N_trials_attention']
-        
-        S_N_pools=data['S_N_pools']
-        S_N_neuron=data['S_N_neuron']
-        
-        # combine data for higher attention gain sims
-        dataFile = 'results/F_higher-Rstim_kappa-'+str(rand_kappa)+'_seed-'+str(rep)+'.npz'    
-        data = np.load(dataFile)    
-        r_stim_amps = np.append(r_stim_amps,data['r_stim_amps'])
-        print(r_stim_amps)
-        S_fr_avg_main = np.concatenate((S_fr_avg_main,data['S_fr_avg_main']),axis=2)
         
         # convert label (0-511) to degrees (0-2pi, 0-359)
         label_stim_main_deg = (label_stim_main/S_N_neuron*360).astype(int)
@@ -291,7 +220,7 @@ for rand_kappa in kappas:
     # cross validation: leave 2 trials out - one each for attended stim
     
     for rep_cnt, rep in enumerate(reps):
-        dataFile = 'results/F_kappa-'+str(rand_kappa)+'_seed-'+str(rep)+'.npz'
+        dataFile = 'results/F_mult_kappa-'+str(rand_kappa)+'_seed-'+str(rep)+'.npz'
         print('Loading '+dataFile)
         data = np.load(dataFile)
         
@@ -309,13 +238,6 @@ for rand_kappa in kappas:
         
         S_N_pools=data['S_N_pools']
         S_N_neuron=data['S_N_neuron']
-        
-        # combine data for higher attention gain sims
-        dataFile = 'results/F_higher-Rstim_kappa-'+str(rand_kappa)+'_seed-'+str(rep)+'.npz'    
-        
-        data = np.load(dataFile)    
-        r_stim_amps = np.append(r_stim_amps,data['r_stim_amps'])
-        S_fr_avg_main = np.concatenate((S_fr_avg_main,data['S_fr_avg_main']),axis=2)
         
         # convert label (0-511) to binary labels (0,1)
         label_stim_main_bin = np.full(len(label_stim_main),np.nan)
@@ -413,7 +335,7 @@ for rand_kappa in kappas:
     for trn_pool_cnt,trn_pool in enumerate(np.arange(1,S_N_pools)):
         tst_pool = np.delete(np.arange(1,S_N_pools),np.arange(1,S_N_pools)==trn_pool)
         for rep_cnt, rep in enumerate(reps):
-            dataFile = 'results/F_kappa-'+str(rand_kappa)+'_seed-'+str(rep)+'.npz'
+            dataFile = 'results/F_mult_kappa-'+str(rand_kappa)+'_seed-'+str(rep)+'.npz'
             print('Loading '+dataFile)
             data = np.load(dataFile)
             
@@ -423,8 +345,6 @@ for rand_kappa in kappas:
             label_trial_main=data['label_trial_main']
             label_stim_strength_main=data['label_stim_strength_main']
             
-            N_stim_loc=data['N_stim_loc']
-            
             r_stim_amps=data['r_stim_amps']
             r_stim_ratios=data['r_stim_ratios']
             stim_strengths=data['stim_strengths']
@@ -433,12 +353,6 @@ for rand_kappa in kappas:
             
             S_N_pools=data['S_N_pools']
             S_N_neuron=data['S_N_neuron']
-            
-            # combine data for higher attention gain sims
-            dataFile = 'results/F_higher-Rstim_kappa-'+str(rand_kappa)+'_seed-'+str(rep)+'.npz'    
-            data = np.load(dataFile)    
-            r_stim_amps = np.append(r_stim_amps,data['r_stim_amps'])
-            S_fr_avg_main = np.concatenate((S_fr_avg_main,data['S_fr_avg_main']),axis=2)
             
             # convert label (0-511) to binary labels (0,1)
             label_stim_main_bin = np.full(len(label_stim_main),np.nan)
@@ -510,8 +424,8 @@ for rand_kappa in kappas:
               'N_trials_sensory':N_trials_sensory, 'N_trials_attention':N_trials_attention,
               'label_stim_strength_main':label_stim_strength_main}
 
-    savemat('figure/result_F_kappa-'+str(rand_kappa)+'.mat',datdic)
-    print('saved figure/result_F_kappa-'+str(rand_kappa)+'.mat')
+    savemat('figure/result_F_mult_kappa-'+str(rand_kappa)+'.mat',datdic)
+    print('saved figure/result_F_mult_kappa-'+str(rand_kappa)+'.mat')
     
 #%% Plot CRFs
     
@@ -520,14 +434,14 @@ for rand_kappa in kappas:
 # attended vs unattended feature response within the stimulated sub-network.
 # We'll calculate and save both - stim vs unstim first, then att vs unatt.
 
-N_reps = 10
+N_reps = 1 # 10
 reps = np.arange(1,N_reps+1)
 avg_FR_stim_kappa = np.full((len(stim_strengths),len(r_stim_amps),S_N_pools,N_reps,5),np.nan)
 cont_gain_kappa = np.full((len(r_stim_amps),N_reps,5),np.nan)
-kappas = [0,0.1,0.2,0.3,0.4]
+kappas = [0] # [0,0.1,0.2,0.3,0.4]
 for k_cnt, rand_kappa in enumerate(kappas):
     for rep_cnt, rep in enumerate(reps):
-        dataFile = 'results/F_kappa-'+str(rand_kappa)+'_seed-'+str(rep)+'.npz'
+        dataFile = 'results/F_mult_kappa-'+str(rand_kappa)+'_seed-'+str(rep)+'.npz'
         data = np.load(dataFile)
         
         # load variables
@@ -535,8 +449,6 @@ for k_cnt, rand_kappa in enumerate(kappas):
         label_stim_main= data['label_stim_main']
         label_trial_main=data['label_trial_main']
         label_stim_strength_main=data['label_stim_strength_main']
-        
-        N_stim_loc=data['N_stim_loc']
         
         r_stim_amps=data['r_stim_amps']
         r_stim_ratios=data['r_stim_ratios']
@@ -546,12 +458,6 @@ for k_cnt, rand_kappa in enumerate(kappas):
         
         S_N_pools=data['S_N_pools']
         S_N_neuron=data['S_N_neuron']
-        
-        # combine data for higher attention gain sims
-        dataFile = 'results/F_higher-Rstim_kappa-'+str(rand_kappa)+'_seed-'+str(rep)+'.npz'    
-        data = np.load(dataFile)    
-        r_stim_amps = np.append(r_stim_amps,data['r_stim_amps'])
-        S_fr_avg_main = np.concatenate((S_fr_avg_main,data['S_fr_avg_main']),axis=2)
         
         #% All plots in one
         avg_FR = np.full((S_N_neuron,2,len(s_stim_amps)),np.nan)
@@ -659,15 +565,15 @@ for k_cnt, rand_kappa in enumerate(kappas):
 # save kappa file separately
 # os.chdir('/mnt/neurocube/local/serenceslab/sunyoung/RNN/figure')
 newdic = {'avg_FR_stim_kappa':avg_FR_stim_kappa,'cont_gain_kappa':cont_gain_kappa}
-savemat('figure/result_F_unstimPool.mat',newdic)
-print('Saved figure/result_F_unstimPool.mat')
+savemat('figure/result_F_mult_unstimPool.mat',newdic)
+print('Saved figure/result_F_mult_unstimPool.mat')
 
 
 #%% Plotting attended vs unattended CRF for kappa levels
 os.chdir('/mnt/neurocube/local/serenceslab/sunyoung/RNN/')
-N_reps = 10
+N_reps = 1 # 10
 reps = np.arange(N_reps)+1
-kappas = [0,0.1,0.2,0.3,0.4]
+kappas = [0] # [0,0.1,0.2,0.3,0.4]
 s_stim_amps = np.arange(20) # strength of bottom-up stimulus
 
 avg_FR_stim_att_kappa = np.full((len(s_stim_amps),len(r_stim_amps),N_reps,5),np.nan)
@@ -680,7 +586,7 @@ for k_cnt, rand_kappa in enumerate(kappas):
     
     # loop over network initializations
     for rep_cnt, rep in enumerate(reps):
-        dataFile = 'results/F_kappa-'+str(rand_kappa)+'_seed-'+str(rep)+'.npz'
+        dataFile = 'results/F_mult_kappa-'+str(rand_kappa)+'_seed-'+str(rep)+'.npz'
         data = np.load(dataFile)
         
         # load variables
@@ -688,8 +594,6 @@ for k_cnt, rand_kappa in enumerate(kappas):
         label_stim_main= data['label_stim_main']
         label_trial_main=data['label_trial_main']
         label_stim_strength_main=data['label_stim_strength_main']
-        
-        N_stim_loc=data['N_stim_loc']
         
         r_stim_amps=data['r_stim_amps']
         r_stim_ratios=data['r_stim_ratios']
@@ -699,12 +603,6 @@ for k_cnt, rand_kappa in enumerate(kappas):
         
         S_N_pools=data['S_N_pools']
         S_N_neuron=data['S_N_neuron']
-        
-        # combine data for higher attention gain sims
-        dataFile = 'results/F_higher-Rstim_kappa-'+str(rand_kappa)+'_seed-'+str(rep)+'.npz'    
-        data = np.load(dataFile)    
-        r_stim_amps = np.append(r_stim_amps,data['r_stim_amps'])
-        S_fr_avg_main = np.concatenate((S_fr_avg_main,data['S_fr_avg_main']),axis=2)
         
         #% All plots in one
         R_ratio = 0 # one r_stim_ratio for now
@@ -823,5 +721,5 @@ for k_cnt, rand_kappa in enumerate(kappas):
     
 newdic = {'avg_FR_stim_att_kappa':avg_FR_stim_att_kappa,'avg_FR_stim_unatt_kappa':avg_FR_stim_unatt_kappa,
           'cont_gain_att_kappa':cont_gain_att_kappa,'cont_gain_unatt_kappa':cont_gain_unatt_kappa}
-savemat('figure/result_F_unattStim.mat',newdic)
-print('Saved figure/result_F_unattStim.mat')
+savemat('figure/result_F_mult_unattStim.mat',newdic)
+print('Saved figure/result_F_mult_unattStim.mat')
