@@ -35,7 +35,7 @@ fileFormat = 'eps'
 
 #%%
 
-nRep = 10 # 10, network initializations
+nRep = 10 # network initializations
 reps = np.arange(nRep)+1 # 1 - 10
 
 kappas = [0,0.1,0.2,0.3,0.4] # K for connectivity randomness
@@ -512,147 +512,126 @@ for rand_kappa in kappas:
 # attended vs unattended feature response within the stimulated sub-network.
 # We'll calculate and save both - stim vs unstim first, then att vs unatt.
 
-N_reps = 10
-reps = np.arange(1,N_reps+1)
-avg_FR_stim_kappa = np.full((len(stim_strengths),len(r_stim_amps),S_N_pools,N_reps,5),np.nan)
-cont_gain_kappa = np.full((len(r_stim_amps),N_reps,5),np.nan)
-kappas = [0,0.1,0.2,0.3,0.4]
-for k_cnt, rand_kappa in enumerate(kappas):
-    for rep_cnt, rep in enumerate(reps):
-        dataFile = 'results/F_kappa-'+str(rand_kappa)+'_seed-'+str(rep)+'.npz'
-        data = np.load(dataFile)
-        
-        # load variables
-        S_fr_avg_main= data['S_fr_avg_main']
-        label_stim_main= data['label_stim_main']
-        label_trial_main=data['label_trial_main']
-        label_stim_strength_main=data['label_stim_strength_main']
-        
-        N_stim_loc=data['N_stim_loc']
-        
-        r_stim_amps=data['r_stim_amps']
-        r_stim_ratios=data['r_stim_ratios']
-        s_stim_amps=data['stim_strengths']
-        
-        N_trials_attention=data['N_trials_attention']
-        
-        S_N_pools=data['S_N_pools']
-        S_N_neuron=data['S_N_neuron']
-        
-        # combine data for higher attention gain sims
-        dataFile = 'results/F_higher-Rstim_kappa-'+str(rand_kappa)+'_seed-'+str(rep)+'.npz'    
-        data = np.load(dataFile)    
-        r_stim_amps = np.append(r_stim_amps,data['r_stim_amps'])
-        S_fr_avg_main = np.concatenate((S_fr_avg_main,data['S_fr_avg_main']),axis=2)
-        
-        #% All plots in one
-        avg_FR = np.full((S_N_neuron,2,len(s_stim_amps)),np.nan)
-        R_ratio = 0 # one r_stim_ratio for now
-        
-        # averaging FRs of neurons that prefer the stimulus
-        N_stim_neuron = 2 #  94 by function
-        Stim_idx = (np.arange(N_stim_neuron)+(S_N_neuron/2-N_stim_neuron/2)).astype(int)
-        # avg_FR_stim = np.full((len(s_stim_amps),2),np.nan)
-        avg_FR_stim_trial = np.full((N_trials_attention,len(s_stim_amps),2),np.nan)
-        
-        if rep_cnt == 0:
-            avg_FR_stim = np.full((len(s_stim_amps),len(r_stim_amps),S_N_pools,N_reps),np.nan)
-            cont_gain = np.full((len(r_stim_amps),N_reps),np.nan)
+if save_all_kappa == 1:
+    N_reps = 10
+    reps = np.arange(1,N_reps+1)
+    avg_FR_stim_kappa = np.full((len(stim_strengths),len(r_stim_amps),S_N_pools,N_reps,5),np.nan)
+    cont_gain_kappa = np.full((len(r_stim_amps),N_reps,5),np.nan)
+    kappas = [0,0.1,0.2,0.3,0.4]
+    for k_cnt, rand_kappa in enumerate(kappas):
+        for rep_cnt, rep in enumerate(reps):
+            dataFile = 'results/F_kappa-'+str(rand_kappa)+'_seed-'+str(rep)+'.npz'
+            data = np.load(dataFile)
             
-            # avg_FR_stim_unatt = np.full((len(s_stim_amps),len(r_stim_amps),N_reps),np.nan)
-            # cont_gain_unatt = np.full((len(r_stim_amps),N_reps),np.nan)
-        
-        colors = plt.cm.viridis(np.linspace(1,0,len(r_stim_amps)))
-        
-        for r_cnt, R_stim in enumerate(r_stim_amps):
-            for ss_cnt, S_stim in enumerate(s_stim_amps):    
-                # trial_idx = (label_stim_strength_main==S_stim) # average separately for trials for attention to stim vs unstim pool
-                trial_idx_label = np.argwhere(label_stim_strength_main==S_stim) # location indices to loop through
-                # doing this the long way... so that it works with whatever stim label
-                for pool in np.arange(S_N_pools):
-                    temp = np.full((len(trial_idx_label)),np.nan) # store average response for each trial (because stim center changes based on the trial)
-                    for t_cnt, tt in enumerate(trial_idx_label):
-                        Stim_idx = (np.arange(N_stim_neuron)+(label_stim_main[tt]-N_stim_neuron/2)+pool*S_N_neuron).astype(int)
-                        # if t_cnt==0:
-                            # print(Stim_idx)
-                        temp[t_cnt] = np.mean(S_fr_avg_main[tt,Stim_idx,r_cnt,0],axis=0)
-                    avg_FR_stim[ss_cnt,r_cnt,pool,rep_cnt] = np.mean(temp)
-            # curve fitting
-            params, rss = fitCRF2(s_stim_amps/20,avg_FR_stim[:,r_cnt,0,rep_cnt],0)
+            # load variables
+            S_fr_avg_main= data['S_fr_avg_main']
+            label_stim_main= data['label_stim_main']
+            label_trial_main=data['label_trial_main']
+            label_stim_strength_main=data['label_stim_strength_main']
             
-            if np.isnan(rss):
-                cont_gain[r_cnt,rep_cnt] = nan
-            else:
-                cont_gain[r_cnt,rep_cnt] = params[1]
+            N_stim_loc=data['N_stim_loc']
             
-                # for pool in np.arange(S_N_pools):
-                #     avg_FR_stim[ss_cnt,r_cnt,pool,rep_cnt] = \
-                #         np.mean(np.mean(S_fr_avg_main[trial_idx,:,r_cnt,0][:,Stim_idx+pool*S_N_neuron],axis=0),axis=0) # trial-average of FR
-    avg_FR_stim_kappa[:,:,:,:,k_cnt] = avg_FR_stim # save out
-    cont_gain_kappa[:,:,k_cnt] = cont_gain
-    
-# plot
-for k_cnt, rand_kappa in enumerate(kappas):
-    avg_FR_stim = avg_FR_stim_kappa[:,:,:,:,k_cnt]
-    avg_FR_stim_att = avg_FR_stim[:,:,0,:]
-    avg_FR_stim_unatt = np.mean(avg_FR_stim[:,:,1:,:],axis=2)
-    repavg_FR_stim_att = np.mean(avg_FR_stim_att,axis=2)
-    se_FR_stim_att = np.std(avg_FR_stim_att,axis=2)/np.sqrt(N_reps)
-    repavg_FR_stim_unatt = np.mean(avg_FR_stim_unatt,axis=2)
-    se_FR_stim_unatt = np.std(avg_FR_stim_unatt,axis=2)/np.sqrt(N_reps)
-    
-    # line1 = np.full((len(r_stim_amps_F)),np.nan)
-    
-    # for r_cnt_S, R_stim_S in enumerate(r_stim_amps_S): # loop over spatial attention first
-    plt.figure(figsize=(8,5))
-    for r_cnt, R_stim in enumerate(r_stim_amps[0:9]):
-        plt.plot(repavg_FR_stim_att[:,r_cnt],color=colors[r_cnt,:],marker='o',linestyle='solid',fillstyle='none',label=str(R_stim))
-        yerr = se_FR_stim_att[:,r_cnt]
-        plt.fill_between(s_stim_amps, repavg_FR_stim_att[:,r_cnt] - yerr, repavg_FR_stim_att[:,r_cnt] + yerr, color=colors[r_cnt,:],alpha=0.3)
+            r_stim_amps=data['r_stim_amps']
+            r_stim_ratios=data['r_stim_ratios']
+            s_stim_amps=data['stim_strengths']
+            
+            N_trials_attention=data['N_trials_attention']
+            
+            S_N_pools=data['S_N_pools']
+            S_N_neuron=data['S_N_neuron']
+            
+            # combine data for higher attention gain sims
+            dataFile = 'results/F_higher-Rstim_kappa-'+str(rand_kappa)+'_seed-'+str(rep)+'.npz'    
+            data = np.load(dataFile)    
+            r_stim_amps = np.append(r_stim_amps,data['r_stim_amps'])
+            S_fr_avg_main = np.concatenate((S_fr_avg_main,data['S_fr_avg_main']),axis=2)
+            
+            #% All plots in one
+            avg_FR = np.full((S_N_neuron,2,len(s_stim_amps)),np.nan)
+            R_ratio = 0 # one r_stim_ratio for now
+            
+            # averaging FRs of neurons that prefer the stimulus
+            N_stim_neuron = 2 #  94 by function
+            Stim_idx = (np.arange(N_stim_neuron)+(S_N_neuron/2-N_stim_neuron/2)).astype(int)
+            # avg_FR_stim = np.full((len(s_stim_amps),2),np.nan)
+            avg_FR_stim_trial = np.full((N_trials_attention,len(s_stim_amps),2),np.nan)
+            
+            if rep_cnt == 0:
+                avg_FR_stim = np.full((len(s_stim_amps),len(r_stim_amps),S_N_pools,N_reps),np.nan)
+                cont_gain = np.full((len(r_stim_amps),N_reps),np.nan)
+            
+            colors = plt.cm.viridis(np.linspace(1,0,len(r_stim_amps)))
+            
+            for r_cnt, R_stim in enumerate(r_stim_amps):
+                for ss_cnt, S_stim in enumerate(s_stim_amps):    
+                    trial_idx_label = np.argwhere(label_stim_strength_main==S_stim) # location indices to loop through
+                    # doing this the long way... so that it works with whatever stim label
+                    for pool in np.arange(S_N_pools):
+                        temp = np.full((len(trial_idx_label)),np.nan) # store average response for each trial (because stim center changes based on the trial)
+                        for t_cnt, tt in enumerate(trial_idx_label):
+                            Stim_idx = (np.arange(N_stim_neuron)+(label_stim_main[tt]-N_stim_neuron/2)+pool*S_N_neuron).astype(int)
+                            temp[t_cnt] = np.mean(S_fr_avg_main[tt,Stim_idx,r_cnt,0],axis=0)
+                        avg_FR_stim[ss_cnt,r_cnt,pool,rep_cnt] = np.mean(temp)
+                # curve fitting
+                params, rss = fitCRF2(s_stim_amps/20,avg_FR_stim[:,r_cnt,0,rep_cnt],0)
+                
+                if np.isnan(rss):
+                    cont_gain[r_cnt,rep_cnt] = nan
+                else:
+                    cont_gain[r_cnt,rep_cnt] = params[1]
+                
+        avg_FR_stim_kappa[:,:,:,:,k_cnt] = avg_FR_stim # save out
+        cont_gain_kappa[:,:,k_cnt] = cont_gain
         
-        plt.plot(repavg_FR_stim_unatt[:,r_cnt],color=colors[r_cnt,:],marker='o',linestyle='dotted',fillstyle='none')
-        yerr = se_FR_stim_unatt[:,r_cnt]
-        plt.fill_between(s_stim_amps, repavg_FR_stim_unatt[:,r_cnt] - yerr, repavg_FR_stim_unatt[:,r_cnt] + yerr, color=colors[r_cnt,:],alpha=0.3)
-       
-        # plt.fill_between(x, y - yerr, y + yerr, alpha=0.3)
-        # for rep_cnt, rep in enumerate(reps):
-        #     plt.plot(avg_FR_stim[:,r_cnt_F,r_cnt_S,rep_cnt],color=colors[r_cnt_F,:])
-     
-    plt.legend()
-    plt.xticks(s_stim_amps,s_stim_amps)
-    # plt.title('Spatial Att. Gain : '+str(R_stim_S))
-    plt.xlabel('Stimulus Strength')
-    plt.ylabel('Avg FR for preferred neurons')
-    plt.title('kappa = '+str(rand_kappa))
-    plt.show()
-    
-    # plot a ratio between stim and unstim
-    
-    ratio_attunatt = np.log(avg_FR_stim_att/avg_FR_stim_unatt)
-    repavg_FR_ratio = np.mean(ratio_attunatt,axis=2)
-    se_FR_ratio = np.std(ratio_attunatt,axis=2)/np.sqrt(N_reps)
-    plt.figure(figsize=(8,5))
-    for r_cnt, R_stim in enumerate(r_stim_amps[0:9]):
-        plt.plot(repavg_FR_ratio[:,r_cnt],color=colors[r_cnt,:],marker='o',linestyle='solid',fillstyle='none',label=str(R_stim))
-        yerr = se_FR_ratio[:,r_cnt]
-        plt.fill_between(s_stim_amps, repavg_FR_ratio[:,r_cnt] - yerr, repavg_FR_ratio[:,r_cnt] + yerr, color=colors[r_cnt,:],alpha=0.3)
-    
-    plt.xticks(s_stim_amps,s_stim_amps)
-    plt.xlabel('Stimulus Strength')
-    plt.ylabel('log(Stim/Unstim)')
-    plt.title('kappa = '+str(rand_kappa))
-    plt.show()
+    # plot
+    for k_cnt, rand_kappa in enumerate(kappas):
+        avg_FR_stim = avg_FR_stim_kappa[:,:,:,:,k_cnt]
+        avg_FR_stim_att = avg_FR_stim[:,:,0,:]
+        avg_FR_stim_unatt = np.mean(avg_FR_stim[:,:,1:,:],axis=2)
+        repavg_FR_stim_att = np.mean(avg_FR_stim_att,axis=2)
+        se_FR_stim_att = np.std(avg_FR_stim_att,axis=2)/np.sqrt(N_reps)
+        repavg_FR_stim_unatt = np.mean(avg_FR_stim_unatt,axis=2)
+        se_FR_stim_unatt = np.std(avg_FR_stim_unatt,axis=2)/np.sqrt(N_reps)
         
+        plt.figure(figsize=(8,5))
+        for r_cnt, R_stim in enumerate(r_stim_amps[0:9]):
+            plt.plot(repavg_FR_stim_att[:,r_cnt],color=colors[r_cnt,:],marker='o',linestyle='solid',fillstyle='none',label=str(R_stim))
+            yerr = se_FR_stim_att[:,r_cnt]
+            plt.fill_between(s_stim_amps, repavg_FR_stim_att[:,r_cnt] - yerr, repavg_FR_stim_att[:,r_cnt] + yerr, color=colors[r_cnt,:],alpha=0.3)
+            
+            plt.plot(repavg_FR_stim_unatt[:,r_cnt],color=colors[r_cnt,:],marker='o',linestyle='dotted',fillstyle='none')
+            yerr = se_FR_stim_unatt[:,r_cnt]
+            plt.fill_between(s_stim_amps, repavg_FR_stim_unatt[:,r_cnt] - yerr, repavg_FR_stim_unatt[:,r_cnt] + yerr, color=colors[r_cnt,:],alpha=0.3)
+           
+        plt.legend()
+        plt.xticks(s_stim_amps,s_stim_amps)
+        # plt.title('Spatial Att. Gain : '+str(R_stim_S))
+        plt.xlabel('Stimulus Strength')
+        plt.ylabel('Avg FR for preferred neurons')
+        plt.title('kappa = '+str(rand_kappa))
+        plt.show()
         
-
-# append decoding2 to the orig file
-# savemat('result_kappa-'+str(rand_kappa)+'.mat',newdic,appendmat=True)
-
-# save kappa file separately
-# os.chdir('/mnt/neurocube/local/serenceslab/sunyoung/RNN/figure')
-newdic = {'avg_FR_stim_kappa':avg_FR_stim_kappa,'cont_gain_kappa':cont_gain_kappa}
-savemat('figure/result_F_unstimPool.mat',newdic)
-print('Saved figure/result_F_unstimPool.mat')
+        # plot a ratio between stim and unstim
+        
+        ratio_attunatt = np.log(avg_FR_stim_att/avg_FR_stim_unatt)
+        repavg_FR_ratio = np.mean(ratio_attunatt,axis=2)
+        se_FR_ratio = np.std(ratio_attunatt,axis=2)/np.sqrt(N_reps)
+        plt.figure(figsize=(8,5))
+        for r_cnt, R_stim in enumerate(r_stim_amps[0:9]):
+            plt.plot(repavg_FR_ratio[:,r_cnt],color=colors[r_cnt,:],marker='o',linestyle='solid',fillstyle='none',label=str(R_stim))
+            yerr = se_FR_ratio[:,r_cnt]
+            plt.fill_between(s_stim_amps, repavg_FR_ratio[:,r_cnt] - yerr, repavg_FR_ratio[:,r_cnt] + yerr, color=colors[r_cnt,:],alpha=0.3)
+        
+        plt.xticks(s_stim_amps,s_stim_amps)
+        plt.xlabel('Stimulus Strength')
+        plt.ylabel('log(Stim/Unstim)')
+        plt.title('kappa = '+str(rand_kappa))
+        plt.show()
+            
+    # save kappa file separately
+    newdic = {'avg_FR_stim_kappa':avg_FR_stim_kappa,'cont_gain_kappa':cont_gain_kappa}
+    savemat('figure/result_F_unstimPool.mat',newdic)
+    print('Saved figure/result_F_unstimPool.mat')
 
 
 #%% Plotting attended vs unattended CRF for kappa levels
@@ -717,8 +696,6 @@ for k_cnt, rand_kappa in enumerate(kappas):
         for r_cnt, R_stim in enumerate(r_stim_amps):
             for ss_cnt, S_stim in enumerate(s_stim_amps):    
                 att_pool = 0
-                # for att_pool in np.arange(1): # only for attended sub-network only for now
-                    # trial_idx = label_stim_strength_main==S_stim
                 trial_idx = np.argwhere((label_stim_strength_main==S_stim)) # average separately for trials for attention to stim vs unstim pool
                 
                 # attended stimulus
@@ -741,14 +718,12 @@ for k_cnt, rand_kappa in enumerate(kappas):
                 
             # init_params, rss = gridfitCRF(s_stim_amps/20,avg_FR_stim[:,r_cnt_F,r_cnt_S,rep_cnt],1)
             params, rss = fitCRF2(s_stim_amps/20,avg_FR_stim_att[:,r_cnt,rep_cnt],0)
-            # params, rss = fitCRF(s_stim_amps/20,avg_FR_stim[:,r_cnt_F,r_cnt_S,rep_cnt],init_params,1)
             if np.isnan(rss):
                 cont_gain_att[r_cnt,rep_cnt] = nan
             else:
                 cont_gain_att[r_cnt,rep_cnt] = params[1]
                 
             params, rss = fitCRF2(s_stim_amps/20,avg_FR_stim_unatt[:,r_cnt,rep_cnt],0)
-            # params, rss = fitCRF(s_stim_amps/20,avg_FR_stim[:,r_cnt_F,r_cnt_S,rep_cnt],init_params,1)
             if np.isnan(rss):
                 cont_gain_unatt[r_cnt,rep_cnt] = nan
             else:
@@ -764,9 +739,6 @@ for k_cnt, rand_kappa in enumerate(kappas):
     repavg_FR_stim_unatt = np.mean(avg_FR_stim_unatt,axis=2)
     se_FR_stim_unatt = np.std(avg_FR_stim_unatt,axis=2)/np.sqrt(N_reps)
     
-    # line1 = np.full((len(r_stim_amps_F)),np.nan)
-    
-    # for r_cnt_S, R_stim_S in enumerate(r_stim_amps_S): # loop over spatial attention first
     plt.figure(figsize=(8,5))
     for r_cnt, R_stim in enumerate(r_stim_amps):
         plt.plot(repavg_FR_stim_att[:,r_cnt],color=colors[r_cnt,:],marker='o',linestyle='solid',fillstyle='none',label=str(R_stim))
@@ -776,10 +748,6 @@ for k_cnt, rand_kappa in enumerate(kappas):
         plt.plot(repavg_FR_stim_unatt[:,r_cnt],color=colors[r_cnt,:],marker='o',linestyle='dotted',fillstyle='none')
         yerr = se_FR_stim_unatt[:,r_cnt]
         plt.fill_between(s_stim_amps, repavg_FR_stim_unatt[:,r_cnt] - yerr, repavg_FR_stim_unatt[:,r_cnt] + yerr, color=colors[r_cnt,:],alpha=0.3)
-       
-        # plt.fill_between(x, y - yerr, y + yerr, alpha=0.3)
-        # for rep_cnt, rep in enumerate(reps):
-        #     plt.plot(avg_FR_stim[:,r_cnt_F,r_cnt_S,rep_cnt],color=colors[r_cnt_F,:])
  
     plt.legend()
     plt.xticks(s_stim_amps,s_stim_amps)
@@ -803,10 +771,6 @@ for k_cnt, rand_kappa in enumerate(kappas):
     plt.plot(r_stim_amps,repavg_cont_gain,linestyle='dotted')
     # plt.plot(r_stim_amps,repavg_cont_gain,color='grey',linestyle='dotted')
     plt.fill_between(r_stim_amps, repavg_cont_gain - yerr, repavg_cont_gain + yerr,alpha=0.3)
-        
-    
-        # for rep_cnt, rep in enumerate(reps):
-        #     plt.plot(cont_gain[:,r_cnt_S,rep_cnt],color=colors[r_cnt_S,:])
     
     plt.xlabel('Feature Attention Strength')
     plt.ylabel('Contrast Gain')
