@@ -1,6 +1,16 @@
-#%% analyze_feature.py
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Thu Apr 24 16:38:03 2025
+
+@author: supark
+"""
+#%% analyze_feature_mult.py
 # Takes npz output files and runs decoding analyses for feature-based 
 # attention simulations. Saves out mat files for plotting figures in Matlab.
+
+# Control - Testing multiplicative gain instead of additive
+# EveryEvery
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -31,8 +41,6 @@ plotAllReps = 0 # plot data for different network initializations
 saveFig = 0 # save figures- optional since we're gonna plot again in Matlab
 figDPI = 300
 fileFormat = 'eps'
-
-
 #%%
 
 nRep = 10 # 10, network initializations
