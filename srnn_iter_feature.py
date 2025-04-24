@@ -817,7 +817,7 @@ class rand_attn_inh:
         ax.set_ylim([0, y_lim])
         ax.set_ylabel(y_label + ' Neurons')
         ax.set_xlabel('Time (ms)')
-        ax.set_title('Att:'+str(attStim)+' R_stim:'+str(self.R_stim)+' StimStr:'+str(self.StimStrength))
+        ax.set_title('Att:'+str(attStim)+' R_stim:'+str(self.R_stim)+' StimStr:'+str(self.StimStrength)+' R_ratio:'+str(self.R_StimProportion))
         
         #------------------------------------------------        
         # plot some horizontal lines marking edges of each pool, only if plotting
@@ -836,7 +836,7 @@ class rand_attn_inh:
         #-------------------------------------------
         # save plot
         #-------------------------------------------
-        plt.savefig('F_AttentionTask_'+y_label+'_Att-'+str(attStim)+'_R_stim-'+str(self.R_stim)+'_StimStrength-'+str(self.StimStrength)+'.png', dpi=600)
+        plt.savefig('F_AttTask_'+y_label+'_Att-'+str(attStim)+'_R-'+str(self.R_stim)+'_S-'+str(self.StimStrength)+'_Rratio-'+str(self.R_StimProportion)+'.png', dpi=600)
 
         #------------------------------------------------        
         # show plot
@@ -1112,10 +1112,10 @@ class rand_attn_inh:
         for r_cnt, R_stim in enumerate(self.r_stim_amps):
             self.R_stim = R_stim
             
-            for r_prop, R_StimProportion in enumerate(self.r_stim_ratios):
+            for r_prop, self.R_StimProportion in enumerate(self.r_stim_ratios):
                 
                 if R_stim == 0:
-                    R_StimProportion = 0
+                    self.R_StimProportion = 0
                     
                 tc = 0 # global trial counter for main task
                 label_stim_main = np.full((nTotalTrial), np.nan) #these should be the same across r_stim loop
@@ -1155,7 +1155,7 @@ class rand_attn_inh:
                                 # sort random neurons by their firing rate
                                 sort_ind = np.argsort(R_state.R_rate[:,-1], axis=0) # current state of firing
                                 stim_ind = np.zeros(self.R_N_neuron)
-                                R_NumNeuronsToStim = int(np.floor(R_StimProportion * self.R_N_neuron))
+                                R_NumNeuronsToStim = int(np.floor(self.R_StimProportion * self.R_N_neuron))
                                 stim_ind[sort_ind[self.R_N_neuron - R_NumNeuronsToStim : -1]] = R_stim
                                 
                                 # reset network
@@ -1204,6 +1204,7 @@ class rand_attn_inh:
             raster_dic = {'S_SensoryTask':S_SensoryTask,'R_SensoryTask':R_SensoryTask, \
                           'S_AttentionTask':S_AttentionTask,'R_AttentionTask':R_AttentionTask,\
                               'stim_strengths':self.stim_strengths,'r_stim_amps':self.r_stim_amps,\
+                                  'r_stim_ratios' : r_stim_ratios, \
                                   'keys':'Sensory[stim,pool],Attention[r_stim_amp,stim_strength,attstim]'}
             savemat('results/F_spikes_kappa-'+str(self.rand_kappa)+'.mat',raster_dic)
             print('Saved results/F_spikes_kappa-'+str(self.rand_kappa)+'.mat')

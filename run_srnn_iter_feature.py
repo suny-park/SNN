@@ -1,7 +1,3 @@
-# TODO: 
-# add task overview at the top
-# check what's used from numpy.matlib?
-
 # Feature-based Attention Simulation in a Spiking Neural Network Model
 # Present two stimuli to the first sub-netwok (no stimulus presented to others)
 # Apply top-down gain to second layer for one of the two stimulus.
@@ -20,6 +16,9 @@ import numpy as np
 from numpy import pi
 import os.path
 from os import path
+
+root_dir = '/mnt/neurocube/local/serenceslab/sunyoung/RNN/'
+os.chdir(root_dir+'SNN')
 
 from srnn_iter_feature import * # Make sure this is the one we want!!
 
@@ -81,12 +80,21 @@ S_rate = 0.4*(1+tanh(S_tf_slope*g-3))/S_tau : Hz
 #-------------------------
 # then make similar equations for the random network
 #-------------------------
+# additive gain
 R_eqs = '''
 dR_act/dt = -R_act/R_tau : 1
 Stim : 1
 g = R_act + R_bias + Stim : 1  
 R_rate = 0.4*(1+tanh(R_tf_slope*g-3))/R_tau : Hz
 '''
+
+# testing multiplicative gain
+# R_eqs = '''
+# dR_act/dt = -R_act/R_tau : 1
+# Stim : 1
+# g = (R_act + R_bias)*Stim : 1  
+# R_rate = 0.4*(1+tanh(R_tf_slope*g-3))/R_tau : Hz
+# '''
 
 #-------------------------
 # baseline input for sensory network
@@ -160,17 +168,18 @@ weight_factor = 1000.0    # factor for computing weights - make float here (and 
 #-------------------------
 # Run a simulation
 #-------------------------
-doPlot = 1 # plot stuff as we go - recommended for a first run
+doPlot = 0 # plot stuff as we go - recommended for a first run
 saveFile = 1 # save file or not
 saveSpikeDat = 0 # save spike data for drawing raster plots offline
 
 stim_strengths = np.arange(0,20) # strength of bottom-up stimulus
-r_stim_amps = np.arange(0,20,2) # strength of top-down gain
-r_stim_ratios = [0.2] # proportion of second layer units to apply top-down gain - fixed to .2
+# r_stim_amps = np.arange(0,20,2) # strength of top-down gain
+r_stim_amps = np.arange(2,20,2) # strength of top-down gain - no 0 for ratio sims
+r_stim_ratios = [0.1,0.2,0.3,0.4,0.5] # proportion of second layer units to apply top-down gain - fixed to .2 for og sim
 r_conn_kappas = [0,0.1,0.2,0.3,0.4] # spread of between-layer connections. higher value means more structure
 
-N_trials_sensory = 100 # number of trials for the sensory task
-N_trials_attention = 50 # number of trials for the attention task
+N_trials_sensory = 0 # 100, number of trials for the sensory task
+N_trials_attention = 50 # 50, number of trials for the attention task
 
 N_stim_loc = 16 # number of stimuli in the sensory task
 N_stim_main = 2 # number of stimuli in the attention task
@@ -223,12 +232,11 @@ for rand_kappa in r_conn_kappas:
 
     #-------------------------
     # Run the sims
-    #-------------------------                    
+    #-------------------------
     S_fr_avg_loc, label_stim_loc, label_pool_loc, label_trial_loc, \
-        S_fr_avg_main, label_stim_main, label_trial_main, \
-            fr_angle, fr_abs, fr_att_abs, label_stim_strength_main = M.run_sim_rand()
+        S_fr_avg_main, label_stim_main, label_trial_main, label_stim_strength_main = M.run_sim_rand()
     
-    fn_decoding = 'results/F_kappa-'+str(rand_kappa)+'_seed-'+str(rep)+'.npz'
+    fn_decoding = root_dir+'results/F_ratio_kappa-'+str(rand_kappa)+'_seed-'+str(rep)+'.npz'
 
     if saveFile:
         np.savez(fn_decoding, S_fr_avg_loc=S_fr_avg_loc, label_stim_loc=label_stim_loc, \
