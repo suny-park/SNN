@@ -26,7 +26,7 @@ from helper_codes import *
 nComp=1000 # for circ corr
 
 # figure stuff
-doPlot=0
+doPlot=1
 plotAllReps = 0 # plot data for different network initializations
 saveFig = 0 # save figures- optional since we're gonna plot again in Matlab
 figDPI = 300
@@ -35,10 +35,11 @@ fileFormat = 'eps'
 
 #%%
 
-nRep = 10 # 10, network initializations
-reps = np.arange(nRep)+1 # 1 - 10
+nRep = 1 # 10, network initializations
+reps = [1]
+# reps = np.arange(nRep)+1 # 1 - 10
 
-kappas = [0,0.1,0.2,0.3,0.4] # K for connectivity randomness
+kappas = [0] # K for connectivity randomness
 
 # looping over all K values
 for rand_kappa in kappas:
@@ -99,8 +100,8 @@ for rand_kappa in kappas:
                 pred_deg = pred/np.pi*180 # convert radians back to degrees
                 
                 # store actual & predicted labels for visualization
-                pred_deg[np.abs(tsty-pred_deg)>180] = np.abs(
-                    pred_deg[np.abs(tsty-pred_deg)>180]-360) # wrapping degrees around the circular space
+                # pred_deg[np.abs(tsty-pred_deg)>180] = np.abs(
+                #     pred_deg[np.abs(tsty-pred_deg)>180]-360) # wrapping degrees around the circular space
                 decoding1[trial_idx_pool==cv_iter,thispool,0,rep_cnt] = tsty
                 decoding1[trial_idx_pool==cv_iter,thispool,1,rep_cnt] = pred_deg
                 
@@ -201,8 +202,8 @@ for rand_kappa in kappas:
                 pred_deg = pred/np.pi*180 # convert radians back to degrees
                 
                 # store test & predicted labels
-                pred_deg[np.abs(tsty-pred_deg)>180] = np.abs(
-                    pred_deg[np.abs(tsty-pred_deg)>180]-360) # wrapping degrees around the circular space
+                # pred_deg[np.abs(tsty-pred_deg)>180] = np.abs(
+                #     pred_deg[np.abs(tsty-pred_deg)>180]-360) # wrapping degrees around the circular space
                 decoding2[:,thispool,0,rep_cnt,r_cnt] = tsty
                 decoding2[:,thispool,1,rep_cnt,r_cnt] = pred_deg
                 
@@ -213,30 +214,30 @@ for rand_kappa in kappas:
                         tsty[this_stim_trial_idx]/180*pi, pred_deg[this_stim_trial_idx]/180*pi)*180/pi
         
         # plot actual and predicted labels
-        if doPlot:
-            plt.figure(figsize=(4,4))
-            plt.scatter(decoding2[:,0,0,:,r_cnt].flatten(),decoding2[:,0,1,:,r_cnt].flatten(),c='k',alpha=0.1)
-            plt.xlabel('Attended Stimulus')
-            plt.ylabel('Predicted Stimulus')
-            plt.xticks(ticks=np.linspace(0,360,5))
-            plt.yticks(ticks=np.linspace(0,360,5))
-            plt.ylim([-10,370])
-            plt.xlim([-10,370])
-            if saveFig==1:
-                plt.savefig('fig2-scatter-stim-Rstim'+str(R_stim)+'.'+fileFormat, dpi=figDPI,bbox_inches='tight',format=fileFormat)
-            plt.show()
+        # if doPlot:
+            # plt.figure(figsize=(4,4))
+            # plt.scatter(decoding2[:,0,0,:,r_cnt].flatten(),decoding2[:,0,1,:,r_cnt].flatten(),c='k',alpha=0.1)
+            # plt.xlabel('Attended Stimulus')
+            # plt.ylabel('Predicted Stimulus')
+            # plt.xticks(ticks=np.linspace(0,360,5))
+            # plt.yticks(ticks=np.linspace(0,360,5))
+            # plt.ylim([-10,370])
+            # plt.xlim([-10,370])
+            # if saveFig==1:
+            #     plt.savefig('fig2-scatter-stim-Rstim'+str(R_stim)+'.'+fileFormat, dpi=figDPI,bbox_inches='tight',format=fileFormat)
+            # plt.show()
             
-            plt.figure(figsize=(4,4))
-            plt.scatter(decoding2[:,1:,0,:,r_cnt].flatten(),decoding2[:,1:,1,:,r_cnt].flatten(),c='k',alpha=0.1)
-            plt.xlabel('Attended Stimulus')
-            plt.ylabel('Predicted Stimulus')
-            plt.xticks(ticks=np.linspace(0,360,5))
-            plt.yticks(ticks=np.linspace(0,360,5))
-            plt.ylim([-10,370])
-            plt.xlim([-10,370])
-            if saveFig==1:
-                plt.savefig('fig2-scatter-unstim-Rstim'+str(R_stim)+'.'+fileFormat, dpi=figDPI,bbox_inches='tight',format=fileFormat)
-            plt.show()
+            # plt.figure(figsize=(4,4))
+            # plt.scatter(decoding2[:,1:,0,:,r_cnt].flatten(),decoding2[:,1:,1,:,r_cnt].flatten(),c='k',alpha=0.1)
+            # plt.xlabel('Attended Stimulus')
+            # plt.ylabel('Predicted Stimulus')
+            # plt.xticks(ticks=np.linspace(0,360,5))
+            # plt.yticks(ticks=np.linspace(0,360,5))
+            # plt.ylim([-10,370])
+            # plt.xlim([-10,370])
+            # if saveFig==1:
+            #     plt.savefig('fig2-scatter-unstim-Rstim'+str(R_stim)+'.'+fileFormat, dpi=figDPI,bbox_inches='tight',format=fileFormat)
+            # plt.show()
     
     # plot average MAE across all stim strengths
     if doPlot:

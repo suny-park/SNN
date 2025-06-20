@@ -11,7 +11,6 @@ from random import choices # needed for sampling from pdf
 
 from scipy.io import savemat
 
-
 import gc as gcPython
 
 import cython
@@ -106,7 +105,7 @@ class rand_attn_inh:
         self.S_rec_w_amp_exc = params.get('S_rec_w_amp_exc', 2)         # amp of excitatory connections
         self.S_rec_w_kappa_exc = params.get('S_rec_w_kappa_exc', 1)     # dispersion of excitatory connections
         self.S_rec_w_amp_inh = params.get('S_rec_w_amp_inh', 2)         # amp of inhibitory connections
-        self.S_rec_w_kappa_inh = params.get('S_rec_w_kappa_inh', 0.25)  # dispersion of inhibitory connections
+        self.S_rec_w_kappa_inh = params.get('S_rec_w_kappa_inh', 0.83)  # dispersion of inhibitory connections
         self.S_SelfExcitation = params.get('S_SelfExcitation', False)
 
         #------------------------------------------------ 
@@ -115,8 +114,8 @@ class rand_attn_inh:
         self.R_rec_w_baseline = params.get('R_rec_w_baseline', 0.28)    # baseline of weight matrix for sensory pools
         self.R_rec_w_amp_exc = params.get('R_rec_w_amp_exc', 0)         # amp of excitatory connections
         self.R_rec_w_kappa_exc = params.get('R_rec_w_kappa_exc', 0)     # dispersion of excitatory connections
-        self.R_rec_w_amp_inh = params.get('R_rec_w_amp_inh', 2)         # amp of inhibitory connections
-        self.R_rec_w_kappa_inh = params.get('R_rec_w_kappa_inh', 1)  # dispersion of inhibitory connections
+        self.R_rec_w_amp_inh = params.get('R_rec_w_amp_inh', 0)         # amp of inhibitory connections
+        self.R_rec_w_kappa_inh = params.get('R_rec_w_kappa_inh', 0)  # dispersion of inhibitory connections
         self.R_SelfExcitation = params.get('R_SelfExcitation', False)
 
         #------------------------------------------------ 
@@ -162,6 +161,8 @@ class rand_attn_inh:
         self.rand_kappa = params.get('rand_kappa',0)
 
         self.saveSpikeDat = params.get('saveSpikeDat',0)
+        
+        self.mult_gain = params.get('mult_gain',0) # use additive(0) or multiplicative(1) gain
          
     #------------------------------------------------        
     #------------------------------------------------
@@ -238,7 +239,6 @@ class rand_attn_inh:
         #------------------------------------------------         
         # scale by stim strength
         #------------------------------------------------ 
-        # stim = self.StimStrength * stim
         stim = stim_strength * stim
 
         return stim
@@ -266,7 +266,6 @@ class rand_attn_inh:
                 #------------------------------------------------         
                 # roll stim to be centered at desired location
                 #------------------------------------------------ 
-                # print(StimVals[sp])
                 stims[sp,:] = np.roll(self.stim_drive, int(StimVals[sp])-int(self.S_N_neuron/2))
         
         #------------------------------------------------ 
@@ -293,7 +292,6 @@ class rand_attn_inh:
         # when we're presenting 2 stimuli to pool 0 and 1 stimulus to pool 1, and applying attention to one of pool 0 stimulus
         # loop over Pool 0 stimulus values and add stimulus input after rolling
         for ps in range(self.N_stim_main):
-            # stims[0,:] = stims[0,:]+np.roll(self.stim_drive, int(self.S_N_neuron/2*ps+self.S_N_neuron/8*2 - self.S_N_neuron/2))
             # change how much to shift based on the rep value
             stims[0,:] = stims[0,:]+np.roll(self.stim_drive, int(self.S_N_neuron/2*ps+self.S_N_neuron/self.shiftStep*attStimShift) - int(self.S_N_neuron/2))
         if plotStim==1:
@@ -385,10 +383,7 @@ class rand_attn_inh:
         # make all the weights here...
         #------------------------------------------------ 
         w = self.R_rec_w_baseline + self.R_rec_w_amp_exc * np.exp(self.R_rec_w_kappa_exc * (np.cos(x-y)-1)) - self.R_rec_w_amp_inh * np.exp(self.R_rec_w_kappa_inh * (np.cos(x-y)-1)) 
-        
-        # plt.imshow(w)
-        # plt.show()
-        
+                
         #------------------------------------------------ 
         # no self excitation - so set main diag to 0
         #------------------------------------------------ 
@@ -700,8 +695,6 @@ class rand_attn_inh:
         """
         Ns = len(S.source)
         Nt = len(S.target)
-        # plt.figure(figsize=(10, 4))
-        # plt.subplot(121)
         plt.plot(zeros(Ns), arange(Ns), 'ok', ms=10)
         plt.plot(ones(Nt), arange(Nt), 'ok', ms=10)
         for i, j in zip(S.i, S.j):
@@ -763,19 +756,12 @@ class rand_attn_inh:
         # patch showing stim period and WM delay in different shades
         #------------------------------------------------        
         rect_stim = patches.Rectangle((0,0), self.StimExposeTime/ms, y_lim, linewidth=0, facecolor='g', alpha = .2)        
-        # rect_wm = patches.Rectangle((self.StimExposeTime/ms,0), (self.AttnTime/ms), y_lim, linewidth=0, facecolor='r', alpha = .2)        
         ax.add_patch(rect_stim)
-        # ax.add_patch(rect_wm)
 
         #-------------------------------------------
         # save plot
         #-------------------------------------------
         plt.savefig('F_SensoryTask_'+y_label+'_StimStrength-10.png', dpi=600)
-        # print((S.t/ms).shape)
-        # print(S.i.shape)
-        # from scipy.io import savemat
-        # raster_dic = {'time':S.t/ms,'spikes':S.i}
-        # savemat('raster_test.mat',raster_dic)
 
         #------------------------------------------------        
         # show plot
@@ -830,13 +816,14 @@ class rand_attn_inh:
         #------------------------------------------------        
         # patch showing stim period and WM delay in different shades
         #------------------------------------------------        
-        rect_stim = patches.Rectangle((0,0), self.AttnTime/ms, y_lim, linewidth=0, facecolor='r', alpha = .2)        
+        rect_stim = patches.Rectangle((0,0), self.AttnTime/ms, y_lim, linewidth=0, facecolor='r', alpha = .2)       
         ax.add_patch(rect_stim)
         
         #-------------------------------------------
         # save plot
         #-------------------------------------------
-        plt.savefig('F_AttTask_'+y_label+'_Att-'+str(attStim)+'_R-'+str(self.R_stim)+'_S-'+str(self.StimStrength)+'_Rratio-'+str(self.R_StimProportion)+'.png', dpi=600)
+        if plt_sensory:
+            plt.savefig('F_AttTask_'+y_label+'_Att-'+str(attStim)+'_R-'+str(self.R_stim)+'_S-'+str(self.StimStrength)+'_Rratio-'+str(self.R_StimProportion)+'.png', dpi=600)
 
         #------------------------------------------------        
         # show plot
@@ -971,11 +958,6 @@ class rand_attn_inh:
         # store a snapshot of network after initialization
         #------------------------------------------------
         store('initialized')
-                
-        #------------------------------------------------
-        # Loop over trials to run the sim!
-        #------------------------------------------------
-        #print('running sim...')
         
         #------------------------------------------------        
         # init matrices to store decoded angle and magnitude (abs) on each trial 
@@ -985,22 +967,13 @@ class rand_attn_inh:
         # nTimeSteps = int(self.StimExposeTime / self.TimeStepForRecording)
         nTimeSteps = int((self.AttnTime) / self.TimeStepForRecording)
         
-        
-        # 1) how similar are the top 10% random neurons selected each time after restoring initialized state
-        # : depends on the % of stimulated random neurons, but 30% and higher
-        # 2) out of curiosity, compare "restore('initialized')" with resetting to baseline "S_pools.Stim = base_in"
-        # : pretty similar, but be careful as restore resets saved firing rates and won't give you the full raster plot of the whole trial
-        
         #------------------------------------------------
-        # Start trial loop -- run with target stim in target pool to define most active random neurons for that stimulus,
-        # reset things back to baseline, stimulate target and second pool with top-down gain on proportion of most active random neurons
+        # Start task loop 
         #------------------------------------------------
         
         ### 1. Sensory Task ###
         # present single stimulus to each of the pools and record the response over N trials
-        # try presenting the same stimulus across all pools
         # output: trial label of presented stimulus, response (trial X neuron)
-        # need to loop over stimulus
         
         #------------------------------------------------
         # generate baseline input levels for each pool
@@ -1012,7 +985,7 @@ class rand_attn_inh:
         
         #%% 
         
-        print('Phase 1: Stimulating Sensory Pools')
+        print('Phase 1: Sensory Task')
         
         N_stim_loc = self.N_stim_loc # number of stimuli in the localizer task
         nTotalTrials = self.N_trials_sensory*N_stim_loc*self.S_N_pools
@@ -1093,29 +1066,29 @@ class rand_attn_inh:
         
         
         ### 2. Attention Task ###
-        # present two stimuli to the first pool and apply top-down gain
+        # present two stimuli to the first sub-network and apply top-down attention
         # record response from the last time windows 
         # output: trial label of attended stimulus, response (trial X neuron)
         # Step 1: Define random neurons that maximally respond to to-be-attended stimulus
         # Step 2: Present two stimuli and apply gain to one of them, record activity 
         print('')
-        print('Phase 2: Applying Gain to Random Layer')
+        print('Phase 2: Attention Task')
         
         nTotalTrial = self.N_trials_attention*self.N_stim_main*self.shiftReps*len(self.stim_strengths)
         
         S_fr_avg_main = np.full((nTotalTrial, self.S_N_pools * self.S_N_neuron,len(self.r_stim_amps),len(self.r_stim_ratios)), np.nan)
         
         # define an empty numpy object to draw raster plots later
-        S_AttentionTask = np.empty((len(self.r_stim_amps), len(self.stim_strengths), self.N_stim_main), dtype=object)
-        R_AttentionTask = np.empty((len(self.r_stim_amps), len(self.stim_strengths), self.N_stim_main), dtype=object)
+        S_AttentionTask = np.empty((len(self.r_stim_amps), len(self.stim_strengths), self.N_stim_main,len(self.r_stim_ratios)), dtype=object)
+        R_AttentionTask = np.empty((len(self.r_stim_amps), len(self.stim_strengths), self.N_stim_main,len(self.r_stim_ratios)), dtype=object)
         
         for r_cnt, R_stim in enumerate(self.r_stim_amps):
             self.R_stim = R_stim
             
             for r_prop, self.R_StimProportion in enumerate(self.r_stim_ratios):
                 
-                if R_stim == 0:
-                    self.R_StimProportion = 0
+                if (~self.mult_gain and R_stim == 0) or (self.mult_gain and R_stim == 1):
+                    self.R_StimProportion = 0 # don't apply top-down attention if it's the baseline condition
                     
                 tc = 0 # global trial counter for main task
                 label_stim_main = np.full((nTotalTrial), np.nan) #these should be the same across r_stim loop
@@ -1125,7 +1098,6 @@ class rand_attn_inh:
                 for ss_cnt, self.StimStrength in enumerate(self.stim_strengths):
                 
                     # another loop here for shifting stimulus pairs
-                    # for attStimShift in np.arange(self.shiftReps):
                     for attStimShift in [8]: # fixed at 8 for better visualization
                     
                         for attStim in range(self.N_stim_main):
@@ -1149,20 +1121,24 @@ class rand_attn_inh:
                                 restore('initialized')
                                 base_in = self.baseline_input()
                                 
-                                # present stimulus
-                                S_pools.Stim = stims + base_in
-                                run(self.StimExposeTime)
-                                # sort random neurons by their firing rate
-                                sort_ind = np.argsort(R_state.R_rate[:,-1], axis=0) # current state of firing
-                                stim_ind = np.zeros(self.R_N_neuron)
-                                R_NumNeuronsToStim = int(np.floor(self.R_StimProportion * self.R_N_neuron))
-                                stim_ind[sort_ind[self.R_N_neuron - R_NumNeuronsToStim : -1]] = R_stim
+                                # define second layer neurons to apply top-down gain to
+                                if self.R_StimProportion:
+                                    # present stimulus
+                                    S_pools.Stim = stims + base_in
+                                    stim_ind = np.zeros(self.R_N_neuron)
+                                    if self.mult_gain: # need gain to be 1 to define selective neurons
+                                        stim_ind += 1
+                                        R_pool.Stim = stim_ind
+                                    run(self.StimExposeTime)
+                                    # sort random neurons by their firing rate
+                                    sort_ind = np.argsort(R_state.R_rate[:,-1], axis=0) # current state of firing
+                                    R_NumNeuronsToStim = int(np.floor(self.R_StimProportion * self.R_N_neuron))
+                                    stim_ind[sort_ind[self.R_N_neuron - R_NumNeuronsToStim : -1]] = R_stim
                                 
-                                # reset network
-                                restore('initialized')
-                                S_pools.Stim = base_in
-                                run(self.StimExposeTime)
-                                restore('initialized')
+                                    # reset network
+                                    S_pools.Stim = base_in
+                                    run(self.StimExposeTime)
+                                    restore('initialized')
                                 
                                 self.stim_drive = self.define_stims(self.StimStrength) # define again with actual stimulus strength
                                 # present two stimuli at the same time
@@ -1171,7 +1147,8 @@ class rand_attn_inh:
                                 
                                 # apply stimulus & top-down gain
                                 S_pools.Stim = stims + base_in
-                                R_pool.Stim = stim_ind
+                                if self.R_StimProportion:
+                                    R_pool.Stim = stim_ind
                                 run(self.AttnTime)
                                 
                                 # record FR
@@ -1183,31 +1160,30 @@ class rand_attn_inh:
                                 if self.doPlot:
                                     if t == 0: # only for the first trial
                                         self.plt_raster_att(S_spike, 'Sensory',attStim)
+                                        self.plt_raster_att(R_spike, 'Random',attStim)
                                         
                                     
                                 if self.saveSpikeDat and (t == 0):
                                     timepoints = np.array(S_spike.t/ms)
                                     spikes = np.array(S_spike.i)
                                     spike_arr = np.vstack((timepoints, spikes))
-                                    S_AttentionTask[r_cnt,ss_cnt,attStim] = spike_arr
+                                    S_AttentionTask[r_cnt,ss_cnt,attStim,r_prop] = spike_arr
                                     
                                     timepoints = np.array(R_spike.t/ms)
                                     spikes = np.array(R_spike.i)
                                     spike_arr = np.vstack((timepoints, spikes))
-                                    R_AttentionTask[r_cnt,ss_cnt,attStim] = spike_arr
+                                    R_AttentionTask[r_cnt,ss_cnt,attStim,r_prop] = spike_arr
                                 
                                 
                                 tc+=1 # increase global trial counter
 
         if self.saveSpikeDat:
-            # save out spike info for drawing raster plots                        
-            raster_dic = {'S_SensoryTask':S_SensoryTask,'R_SensoryTask':R_SensoryTask, \
-                          'S_AttentionTask':S_AttentionTask,'R_AttentionTask':R_AttentionTask,\
+            raster_dic = {'S_AttentionTask':S_AttentionTask,'R_AttentionTask':R_AttentionTask,\
                               'stim_strengths':self.stim_strengths,'r_stim_amps':self.r_stim_amps,\
-                                  'r_stim_ratios' : r_stim_ratios, \
-                                  'keys':'Sensory[stim,pool],Attention[r_stim_amp,stim_strength,attstim]'}
-            savemat('results/F_spikes_kappa-'+str(self.rand_kappa)+'.mat',raster_dic)
-            print('Saved results/F_spikes_kappa-'+str(self.rand_kappa)+'.mat')
+                                  'r_stim_ratios':self.r_stim_ratios, \
+                                  'keys':'Attention[r_stim_amp,stim_strength,attstim]'}
+            savemat('figure/F_spikes_kappa-'+str(self.rand_kappa)+'.mat',raster_dic)
+            print('Saved figure/F_spikes_kappa-'+str(self.rand_kappa)+'.mat')
         
         #------------------------------------------------        
         # finish up garbage collection...only if not on mac

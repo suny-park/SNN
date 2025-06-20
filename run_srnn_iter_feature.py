@@ -1,14 +1,21 @@
 # Feature-based Attention Simulation in a Spiking Neural Network Model
+# Adapted from Bouchacourt & Buschman (2019): https://www.cell.com/neuron/fulltext/S0896-6273(19)30377-0
+# Original code: https://github.com/buschman-lab/FlexibleWorkingMemory
 # Present two stimuli to the first sub-netwok (no stimulus presented to others)
-# Apply top-down gain to second layer for one of the two stimulus.
+# Apply top-down modulation to second layer for one of the two stimulus.
 
 # Sensory Task
 # 1: Initialize network and connections
-# 2: Present one out of 16 equally spaced stimuli (in all pools or one pool at a time?) 
-# - to record responses to each stimulus and use for decoding
+# 2: Present one out of 16 equally spaced stimuli to one sub-network at a time
 # 3: RESET
 
 # Attention Task
+# 1: Present to-be-attended stimulus on its own
+# 2: define top x% of second layer neurons
+# 3: Present two stimuli and apply top-down modulation to neurons in 2
+
+# Note that second layer neurons are labeled as 'random' neurons in these scripts
+# following notations from Bouchacourt & Buschman (2019).
 
 
 from brian2 import *
@@ -17,10 +24,7 @@ from numpy import pi
 import os.path
 from os import path
 
-root_dir = '/mnt/neurocube/local/serenceslab/sunyoung/RNN/'
-os.chdir(root_dir+'SNN')
-
-from srnn_iter_feature import * # Make sure this is the one we want!!
+from srnn_iter_feature import * # contains functions that actually run the sims
 
 #-------------------------
 # number of neurons in sensory and random layers
@@ -35,7 +39,7 @@ R_N_neuron = 1024
 S_N_pools = 8
 
 #-------------------------
-# tau: https://www.frontiersin.org/articles/10.3389/fncir.2020.615626/full
+# tau
 #-------------------------
 S_tau = 0.01 * second   # for sensory layer
 R_tau = 0.01 * second   # for random layer
@@ -49,9 +53,9 @@ R_bias = 0              # for random layer
 #-------------------------
 # slope of non-linear transfer function 
 #-------------------------
-S_tf_slope = 0.25       # for sensory layer- important for dynamic range....4 puts it into attractor land
+S_tf_slope = 0.25       # for sensory layer
 R_tf_slope = 0.25        # for random layer
-# 8/4/22 slopes fixed at .25 
+# Slopes changed from .4 in Bouchacourt & Buschman (2019) to .25 to achieve dynamic range
 
 #-------------------------
 # seed initial synapse range
@@ -104,7 +108,7 @@ BaselineScale = 0
 #-------------------------
 # stimulus strength and precision
 #-------------------------
-kappa = 14         # for von Mises
+kappa = 14         # for von Mises -- this matches the Gaussian stimulus input in Bouchacourt & Buschman (2019)
 StimToZero = 3     # stim input goes to 0 <> StimToZero stds from mu 
 
 #-------------------------
@@ -124,13 +128,13 @@ S_rec_w_baseline = 0.28  # baseline of weight matrix for sensory pools
 S_rec_w_amp_exc = 2      # amp of excitatory connections 
 S_rec_w_kappa_exc = 3    # dispersion of excitatory connections
 S_rec_w_amp_inh = 2      # amp of inhibitory connections
-S_rec_w_kappa_inh = .83  # dispersion of inhibitory connections, higher is less dispersion, less interference between stimuli -- .83 - 8/28/24
+S_rec_w_kappa_inh = .83  # dispersion of inhibitory connections, higher is less dispersion, less interference between stimuli. Changed from .25 to .83
 S_SelfExcitation = False     #  self excitation? True/False (False default). If False, then zero out main diag of w mat
 
 #------------------------------------------------ 
 # synaptic params for recurrent connections in random layer, hence these all have the 'R_' prefix
 #------------------------------------------------ 
-R_inh_connections = 0
+R_inh_connections = 0 # no recurrent connections in current sims
 
 if R_inh_connections:
     R_rec_w_baseline = .28
@@ -153,11 +157,11 @@ R_SelfExcitation = False     #  self excitation? True/False (False default). If 
 # connection - to S_to_R means sensory to random, and R_to_S means
 # random to sensory
 #------------------------------------------------ 
-S_to_R_target_w = 2.1    # feedforward weight before balancing (alpha param from equations in BB2019)
+S_to_R_target_w = 2.1    # feedforward weight before balancing (alpha param from equations in Bouchacourt & Buschman (2019))
 S_to_R_ei_balance = -1    # -1 is perfectly balanced feedforward E/I ratio
 S_to_R_baseline = 0       # 
 
-R_to_S_target_w = 0.2    # feedback weight before balancing (beta from equations in BB2019)
+R_to_S_target_w = 0.2    # feedback weight before balancing (beta from equations in Bouchacourt & Buschman (2019))
 R_to_S_ei_balance = -1   # -1 is perfectly balanced feedback E/I ratio
 R_to_S_baseline = 0
 
@@ -168,17 +172,16 @@ weight_factor = 1000.0    # factor for computing weights - make float here (and 
 #-------------------------
 # Run a simulation
 #-------------------------
-doPlot = 0 # plot stuff as we go - recommended for a first run
-saveFile = 1 # save file or not
+doPlot = 1 # plot stuff as we go - recommended for a first run
+saveFile = 0 # save file or not
 saveSpikeDat = 0 # save spike data for drawing raster plots offline
 
-stim_strengths = np.arange(0,20) # strength of bottom-up stimulus
-# r_stim_amps = np.arange(0,20,2) # strength of top-down gain
-r_stim_amps = np.arange(2,20,2) # strength of top-down gain - no 0 for ratio sims
-r_stim_ratios = [0.1,0.2,0.3,0.4,0.5] # proportion of second layer units to apply top-down gain - fixed to .2 for og sim
+stim_strengths = np.arange(0,20) # strength of bottom-up stimulus input
+r_stim_amps = np.arange(0,20,2) # strength of top-down gain
+r_stim_ratios = [0.1,0.2,0.3,0.4,0.5] # proportion of second layer units to apply top-down - fixed to .2 for og sim
 r_conn_kappas = [0,0.1,0.2,0.3,0.4] # spread of between-layer connections. higher value means more structure
 
-N_trials_sensory = 0 # 100, number of trials for the sensory task
+N_trials_sensory = 100 # 100, number of trials for the sensory task
 N_trials_attention = 50 # 50, number of trials for the attention task
 
 N_stim_loc = 16 # number of stimuli in the sensory task
@@ -187,9 +190,9 @@ N_stim_main = 2 # number of stimuli in the attention task
 shiftStep = 32 # number of steps to shift the stimulus pair in the attention task
 shiftReps = 1 # used to be 16 - don't shift and keep attStimShift at 8
 
-for rand_kappa in r_conn_kappas:
+rep=1 # how many network initializations to run -- this is used to set the random seed
 
-    rep=1
+for rand_kappa in r_conn_kappas:
     t = time.time()
 
     #-------------------------
@@ -236,8 +239,11 @@ for rand_kappa in r_conn_kappas:
     S_fr_avg_loc, label_stim_loc, label_pool_loc, label_trial_loc, \
         S_fr_avg_main, label_stim_main, label_trial_main, label_stim_strength_main = M.run_sim_rand()
     
-    fn_decoding = root_dir+'results/F_ratio_kappa-'+str(rand_kappa)+'_seed-'+str(rep)+'.npz'
+    fn_decoding = root_dir+'results/F_kappa-'+str(rand_kappa)+'_seed-'+str(rep)+'.npz'
 
+    #-------------------------
+    # Save data into npz
+    #-------------------------
     if saveFile:
         np.savez(fn_decoding, S_fr_avg_loc=S_fr_avg_loc, label_stim_loc=label_stim_loc, \
                  label_pool_loc=label_pool_loc, label_trial_loc=label_trial_loc, \
